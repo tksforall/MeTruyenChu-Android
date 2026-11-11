@@ -17,6 +17,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -76,6 +77,9 @@ fun ReviewComment(
     var likingReviews by remember {
         mutableStateOf<Set<Long>>(emptySet())
     }
+
+    // Thêm state lưu ID người dùng hiện tại
+    var currentUserId by remember { mutableStateOf<Long?>(null) }
 
     val scope = rememberCoroutineScope()
 
@@ -149,52 +153,126 @@ fun ReviewComment(
                 val replyListRaw = repliesResponse.body().orEmpty()
 
                 // Dùng cùng API với BookReview để lấy tên người dùng.
-                val mainReviews = try {
-                    val response = RetrofitClient.api.getMainReviews(bookId)
-                    if (response.isSuccessful) {
-                        response.body().orEmpty()
-                    } else {
-                        emptyList()
+//                val mainReviews = try {
+//                    val response = RetrofitClient.api.getMainReviews(bookId)
+//                    if (response.isSuccessful) {
+//                        response.body().orEmpty()
+//                    } else {
+//                        emptyList()
+//                    }
+//                } catch (_: Exception) {
+//                    emptyList()
+//                }
+//
+//                // Tạo bảng ánh xạ userId -> userName.
+//                val loadedUserNames = userNames.toMutableMap()
+//
+//                val allUserIds = (listOf(rootReview.userId) + replyListRaw.map { it.userId }).distinct()
+//
+//                mainReviews.forEach { review ->
+//                    val name = review.userName?.takeIf { it.isNotBlank() }
+//
+//                    if (name != null) {
+//                        loadedUserNames[review.userId] = name
+//                    }
+//                }
+//
+//                // Bổ sung tên cho bình luận gốc.
+//                val enrichedRootReview = rootReview.copy(
+//                    userName = rootReview.userName
+//                        ?.takeIf { it.isNotBlank() }
+//                        ?: loadedUserNames[rootReview.userId]
+//                )
+//
+//                // Bổ sung tên cho các câu trả lời.
+//                val replyList = replyListRaw
+//                    .sortedBy { it.createdAt }
+//                    .map { reply ->
+//                        reply.copy(
+//                            userName = reply.userName
+//                                ?.takeIf { it.isNotBlank() }
+//                                ?: loadedUserNames[reply.userId]
+//                        )
+//                    }
+                // ----------------------------------------------
+                // 1. Lấy tất cả userId xuất hiện trên màn hình
+                val allUserIds = (listOf(rootReview.userId) + replyListRaw.map { it.userId }).distinct()
+
+                // 2. Fetch tên từng User ở background thread IO
+                val newFetchedNames = mutableMapOf<Long, String>()
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    allUserIds.forEach { uid ->
+                        try {
+                            val uResponse = RetrofitClient.api.getUserById(uid)
+                            if (uResponse.isSuccessful) {
+                                val userObj = uResponse.body()
+                                val name = userObj?.userName?.takeIf { it.isNotBlank() }
+                                    ?: userObj?.email?.takeIf { it.isNotBlank() }
+
+                                if (!name.isNullOrBlank()) {
+                                    newFetchedNames[uid] = name
+                                }
+                            }
+                        } catch (e: Exception) {
+                            android.util.Log.e("ReviewComment", "Lỗi fetch user $uid", e)
+                        }
                     }
-                } catch (_: Exception) {
-                    emptyList()
                 }
 
-                // Tạo bảng ánh xạ userId -> userName.
-                val loadedUserNames = userNames.toMutableMap()
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    allUserIds.forEach { uid ->
+                        try {
+                            val uResponse = RetrofitClient.api.getUserById(uid)
+                            android.util.Log.d("DEBUG_USER", "ID: $uid | Response Code: ${uResponse.code()}")
 
-                mainReviews.forEach { review ->
-                    val name = review.userName?.takeIf { it.isNotBlank() }
+                            if (uResponse.isSuccessful) {
+                                val userObj = uResponse.body()
+                                android.util.Log.d("DEBUG_USER", "User Obj trả về: $userObj")
 
-                    if (name != null) {
-                        loadedUserNames[review.userId] = name
+                                val name = userObj?.userName?.takeIf { it.isNotBlank() }
+                                    ?: userObj?.email?.takeIf { it.isNotBlank() }
+
+                                if (!name.isNullOrBlank()) {
+                                    newFetchedNames[uid] = name
+                                }
+                            } else {
+                                android.util.Log.e("DEBUG_USER", "Lỗi Code: ${uResponse.code()} | Body: ${uResponse.errorBody()?.string()}")
+                            }
+                        } catch (e: Exception) {
+                            android.util.Log.e("DEBUG_USER", "Exception khi gọi user $uid", e)
+                        }
                     }
                 }
 
-                // Bổ sung tên cho bình luận gốc.
+                // 3. Cập nhật State userNames để Compose Re-render lại UI
+                userNames = userNames + newFetchedNames
+
+                // 4. Gán tên chuẩn vào Object hiển thị
                 val enrichedRootReview = rootReview.copy(
-                    userName = rootReview.userName
-                        ?.takeIf { it.isNotBlank() }
-                        ?: loadedUserNames[rootReview.userId]
+                    userName = userNames[rootReview.userId]
+                        ?: rootReview.userName?.takeIf { it.isNotBlank() }
+                        ?: "User #${rootReview.userId}"
                 )
 
-                // Bổ sung tên cho các câu trả lời.
                 val replyList = replyListRaw
                     .sortedBy { it.createdAt }
                     .map { reply ->
                         reply.copy(
-                            userName = reply.userName
-                                ?.takeIf { it.isNotBlank() }
-                                ?: loadedUserNames[reply.userId]
+                            userName = userNames[reply.userId]
+                                ?: reply.userName?.takeIf { it.isNotBlank() }
+                                ?: "User #${reply.userId}"
                         )
                     }
 
-
-                 // Lưu tên người dùng.
-                userNames = loadedUserNames
-
                 mainReview = enrichedRootReview
                 replies = replyList
+
+
+
+
+                // ---------------------------------------
+
+
 
                 // Mặc định ô nhập là trả lời bình luận gốc.
                 replyingTo = enrichedRootReview
@@ -280,6 +358,16 @@ fun ReviewComment(
     }
 
     LaunchedEffect(bookId, reviewId) {
+        scope.launch {
+            try {
+                val userResponse = RetrofitClient.api.getCurrentUser()
+                if (userResponse.isSuccessful) {
+                    // Lấy đúng trường userId từ UserResponse
+                    currentUserId = userResponse.body()?.userId
+                }
+            } catch (_: Exception) {}
+        }
+
         loadReviews()
     }
 
@@ -436,27 +524,34 @@ fun ReviewComment(
                                         ?: "User #${reply.userId}",
                                     isMainComment = false,
                                     isLiked = reply.reviewId in likedReviews,
-                                    likeCount = likeCounts[reply.reviewId]
-                                        ?: reply.likeCount,
+                                    likeCount = likeCounts[reply.reviewId] ?: reply.likeCount,
                                     isLiking = reply.reviewId in likingReviews,
-                                    onLikeClick = {
-                                        toggleLike(reply)
-                                    },
+                                    currentUserId = currentUserId,
+                                    onLikeClick = { toggleLike(reply) },
                                     onReplyClick = {
-                                        // Trả lời tiếp trong cùng luồng
-                                        // bằng cách gắn vào bình luận gốc.
                                         replyingTo = mainReview
-
                                         val username = userNames[reply.userId]
                                             ?: reply.userName?.takeIf { it.isNotBlank() }
                                             ?: "User #${reply.userId}"
-
                                         replyText = "@$username "
                                         openReplyInput()
                                     },
                                     onReportClick = {
                                         selectedReview = reply
                                         showReportSheet = true
+                                    },
+                                    onDeleteClick = {
+                                        // Gọi API Xóa review ở đây và load lại danh sách
+                                        scope.launch {
+                                            try {
+                                                val response = RetrofitClient.api.deleteReview(reply.reviewId)
+                                                if (response.isSuccessful) {
+                                                    loadReviews() // Tải lại danh sách sau khi xóa thành công
+                                                }
+                                            } catch (e: Exception) {
+                                                android.util.Log.e("DeleteReview", "Lỗi xóa review", e)
+                                            }
+                                        }
                                     }
                                 )
                             }
@@ -559,12 +654,15 @@ private fun ReviewCommentItem(
     isLiked: Boolean,
     likeCount: Long,
     isLiking: Boolean,
+    currentUserId: Long? = null, // Thêm ID user hiện tại để check chính chủ
     onLikeClick: () -> Unit,
     onReplyClick: () -> Unit,
-    onReportClick: () -> Unit
+    onReportClick: () -> Unit,
+    onDeleteClick: () -> Unit = {} // Callback khi nhấn xóa
 ) {
     val avatarSize = 42.dp
     val contentStart = 56.dp
+    val isMyComment = currentUserId != null && review.userId == currentUserId
 
     Column(
         modifier = Modifier
@@ -578,6 +676,7 @@ private fun ReviewCommentItem(
                 vertical = if (isMainComment) 10.dp else 8.dp
             )
     ) {
+        // --- HÀNG HEADER (Avatar, Tên, và Nút Xóa góc trên) ---
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
@@ -625,16 +724,22 @@ private fun ReviewCommentItem(
                 }
             }
 
-            Icon(
-                imageVector = Icons.Default.Flag,
-                contentDescription = "Báo cáo",
-                tint = Color(0xFFAAAAAA),
-                modifier = Modifier
-                    .size(19.dp)
-                    .clickable { onReportClick() }
-            )
+            // GÓC TRÊN BÊN PHẢI:
+            // - Bỏ hẳn icon Flag ở Review chính.
+            // - Review con: Hiện icon Thùng rác đỏ nếu là comment của CHÍNH MÌNH.
+            if (!isMainComment && isMyComment) {
+                Icon(
+                    imageVector = Icons.Default.Delete,
+                    contentDescription = "Xóa bình luận",
+                    tint = Color(0xFFE53935), // Màu đỏ
+                    modifier = Modifier
+                        .size(20.dp)
+                        .clickable { onDeleteClick() }
+                )
+            }
         }
 
+        // --- NỘI DUNG BÌNH LUẬN ---
         Text(
             text = review.content,
             color = Color.White,
@@ -649,6 +754,7 @@ private fun ReviewCommentItem(
                 )
         )
 
+        // --- HÀNG BOTTOM (Thời gian/Trả lời, Báo cáo, Like) ---
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -663,8 +769,6 @@ private fun ReviewCommentItem(
                     modifier = Modifier.weight(1f)
                 )
             } else {
-                //Spacer(modifier = Modifier.weight(1f))
-
                 Text(
                     text = "Trả lời $displayUserName",
                     color = Color(0xFF858585),
@@ -677,6 +781,20 @@ private fun ReviewCommentItem(
 
             Spacer(modifier = Modifier.weight(1f))
 
+            // NÚT BÁO CÁO (Nằm bên trái nút Like - Chỉ hiện ở Review Con)
+            if (!isMainComment) {
+                Icon(
+                    imageVector = Icons.Default.Flag,
+                    contentDescription = "Báo cáo",
+                    tint = Color(0xFFAAAAAA),
+                    modifier = Modifier
+                        .size(17.dp)
+                        .clickable { onReportClick() }
+                )
+                Spacer(modifier = Modifier.width(16.dp))
+            }
+
+            // NÚT LIKE
             Row(
                 modifier = Modifier
                     .wrapContentWidth(Alignment.End)
@@ -689,8 +807,7 @@ private fun ReviewCommentItem(
                 Icon(
                     imageVector = Icons.Default.ThumbUp,
                     contentDescription = if (isLiked) "Bỏ thích" else "Thích",
-                    tint = if (isLiked) Color(0xFF2196F3)
-                    else Color(0xFF858585),
+                    tint = if (isLiked) Color(0xFF2196F3) else Color(0xFF858585),
                     modifier = Modifier.size(19.dp)
                 )
 
@@ -698,39 +815,10 @@ private fun ReviewCommentItem(
 
                 Text(
                     text = likeCount.toString(),
-                    color = if (isLiked) Color(0xFF2196F3)
-                    else Color(0xFF858585),
+                    color = if (isLiked) Color(0xFF2196F3) else Color(0xFF858585),
                     fontSize = 13.sp
                 )
             }
-
-
-            /*
-
-            Spacer(modifier = Modifier.width(16.dp))
-
-            Row(
-                modifier = Modifier
-                    .clickable { onReplyClick() }
-                    .padding(horizontal = 3.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Comment,
-                    contentDescription = "Trả lời",
-                    tint = Color(0xFF858585),
-                    modifier = Modifier.size(19.dp)
-                )
-
-                Spacer(modifier = Modifier.width(4.dp))
-
-                Text(
-                    text = review.replyCount.toString(),
-                    color = Color(0xFF858585),
-                    fontSize = 13.sp
-                )
-            }
-            */
         }
     }
 }
@@ -813,30 +901,6 @@ private fun ReplyInput(
             )
     ) {
         Column {
-//            if (replyTo != null) {
-//                Row(
-//                    modifier = Modifier
-//                        .fillMaxWidth()
-//                        .padding(horizontal = 8.dp, vertical = 4.dp),
-//                    verticalAlignment = Alignment.CenterVertically
-//                ) {
-//                    Text(
-//                        text = "Đang trả lời ${replyToUserName ?: "User #${replyTo?.userId}"}",
-//                        color = Color(0xFFAAAAAA),
-//                        fontSize = 12.sp,
-//                        modifier = Modifier.weight(1f)
-//                    )
-//
-//                    Text(
-//                        text = "Hủy",
-//                        color = Color.White,
-//                        fontSize = 12.sp,
-//                        modifier = Modifier.clickable {
-//                            onCancelReply()
-//                        }
-//                    )
-//                }
-//            }
 
             Row(
                 modifier = Modifier

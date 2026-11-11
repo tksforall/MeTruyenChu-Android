@@ -39,32 +39,34 @@ object RetrofitClient {
     private val authInterceptor =
         okhttp3.Interceptor { chain ->
 
-            val request =
-                chain.request()
+            val originalRequest = chain.request()
 
+            // 1. Kiểm tra cờ No-Auth để bỏ qua Token
+            if (originalRequest.header("No-Auth") != null) {
+                val newRequest = originalRequest.newBuilder()
+                    .removeHeader("No-Auth")
+                    .build()
+                return@Interceptor chain.proceed(newRequest)
+            }
+
+            // 2. Request thông thường -> Thêm Token nếu có
             val token =
                 if (::sessionManager.isInitialized) {
-
                     sessionManager.getToken()
-
                 } else {
-
                     null
                 }
 
             val newRequest =
                 if (!token.isNullOrEmpty()) {
-
-                    request.newBuilder()
+                    originalRequest.newBuilder()
                         .addHeader(
                             "Authorization",
                             "Bearer $token"
                         )
                         .build()
-
                 } else {
-
-                    request
+                    originalRequest
                 }
 
             chain.proceed(newRequest)

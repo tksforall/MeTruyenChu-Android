@@ -8,6 +8,7 @@ import retrofit2.http.POST
 import retrofit2.http.PUT
 import retrofit2.http.Path
 import retrofit2.http.Query
+import retrofit2.http.Headers
 
 interface ApiService {
 
@@ -32,6 +33,7 @@ interface ApiService {
     // USER
     // ==================================================
 
+    @Headers("No-Auth: true")
     @GET("api/users/{userId}")
     suspend fun getUserById(
         @Path("userId") userId: Long
@@ -308,6 +310,11 @@ interface ApiService {
         @Body request: CommentCreateRequest
     ): Response<CommentResponse>
 
+    @DELETE("api/comments/{commentId}")
+    suspend fun deleteComment(
+        @Path("commentId") commentId: Long
+    ): Response<Unit>
+
 
     // ==================================================
     // COMMENT LIKE
@@ -369,6 +376,11 @@ interface ApiService {
     suspend fun createReview(
         @Body request: ReviewCreateRequest
     ): Response<ReviewResponse>
+
+    @DELETE("api/reviews/{reviewId}")
+    suspend fun deleteReview(
+        @Path("reviewId") reviewId: Long
+    ): Response<Unit>
 
 
     // ==================================================
