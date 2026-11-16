@@ -7,6 +7,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Comment
@@ -35,6 +37,14 @@ import kotlinx.coroutines.launch
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.exclude
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.material.icons.filled.ChatBubbleOutline
+
+
 @Composable
 fun ReviewComment(
     bookId: Long,
@@ -57,7 +67,8 @@ fun ReviewComment(
 
     var isLoading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
-    var replyText by remember { mutableStateOf("") }
+    var replyText by remember { mutableStateOf(TextFieldValue("")) }
+
     var selectedReview by remember {
         mutableStateOf<ReviewResponse?>(null)
     }
@@ -195,62 +206,45 @@ fun ReviewComment(
 //                        )
 //                    }
                 // ----------------------------------------------
-                // 1. Lấy tất cả userId xuất hiện trên màn hình
-                val allUserIds = (listOf(rootReview.userId) + replyListRaw.map { it.userId }).distinct()
-
-                // 2. Fetch tên từng User ở background thread IO
+                // 1. Ưu tiên dùng luôn userName Backend đã gắn sẵn trong ReviewResponse
                 val newFetchedNames = mutableMapOf<Long, String>()
-                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                    allUserIds.forEach { uid ->
-                        try {
-                            val uResponse = RetrofitClient.api.getUserById(uid)
-                            if (uResponse.isSuccessful) {
-                                val userObj = uResponse.body()
-                                val name = userObj?.userName?.takeIf { it.isNotBlank() }
-                                    ?: userObj?.email?.takeIf { it.isNotBlank() }
+                (listOf(rootReview) + replyListRaw).forEach { rev ->
+                    val nameFromApi = rev.userName?.takeIf { it.isNotBlank() }
+                    if (nameFromApi != null) {
+                        newFetchedNames[rev.userId] = nameFromApi
+                    }
+                }
 
-                                if (!name.isNullOrBlank()) {
-                                    newFetchedNames[uid] = name
+                // 2. Chỉ gọi getUserById cho những userId nào Backend chưa trả kèm tên
+                val missingUserIds = (listOf(rootReview.userId) + replyListRaw.map { it.userId })
+                    .distinct()
+                    .filter { !newFetchedNames.containsKey(it) }
+
+                if (missingUserIds.isNotEmpty()) {
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                        missingUserIds.forEach { uid ->
+                            try {
+                                val uResponse = RetrofitClient.api.getUserById(uid)
+                                if (uResponse.isSuccessful) {
+                                    val userObj = uResponse.body()
+                                    val name = userObj?.userName?.takeIf { it.isNotBlank() }
+                                        ?: userObj?.email?.takeIf { it.isNotBlank() }
+                                    if (!name.isNullOrBlank()) {
+                                        newFetchedNames[uid] = name
+                                    }
                                 }
-                            }
-                        } catch (e: Exception) {
-                            android.util.Log.e("ReviewComment", "Lỗi fetch user $uid", e)
+                            } catch (_: Exception) {}
                         }
                     }
                 }
 
-                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                    allUserIds.forEach { uid ->
-                        try {
-                            val uResponse = RetrofitClient.api.getUserById(uid)
-                            android.util.Log.d("DEBUG_USER", "ID: $uid | Response Code: ${uResponse.code()}")
-
-                            if (uResponse.isSuccessful) {
-                                val userObj = uResponse.body()
-                                android.util.Log.d("DEBUG_USER", "User Obj trả về: $userObj")
-
-                                val name = userObj?.userName?.takeIf { it.isNotBlank() }
-                                    ?: userObj?.email?.takeIf { it.isNotBlank() }
-
-                                if (!name.isNullOrBlank()) {
-                                    newFetchedNames[uid] = name
-                                }
-                            } else {
-                                android.util.Log.e("DEBUG_USER", "Lỗi Code: ${uResponse.code()} | Body: ${uResponse.errorBody()?.string()}")
-                            }
-                        } catch (e: Exception) {
-                            android.util.Log.e("DEBUG_USER", "Exception khi gọi user $uid", e)
-                        }
-                    }
-                }
-
-                // 3. Cập nhật State userNames để Compose Re-render lại UI
+                // 3. Cập nhật State userNames
                 userNames = userNames + newFetchedNames
 
                 // 4. Gán tên chuẩn vào Object hiển thị
                 val enrichedRootReview = rootReview.copy(
-                    userName = userNames[rootReview.userId]
-                        ?: rootReview.userName?.takeIf { it.isNotBlank() }
+                    userName = rootReview.userName?.takeIf { it.isNotBlank() }
+                        ?: userNames[rootReview.userId]
                         ?: "User #${rootReview.userId}"
                 )
 
@@ -258,8 +252,8 @@ fun ReviewComment(
                     .sortedBy { it.createdAt }
                     .map { reply ->
                         reply.copy(
-                            userName = userNames[reply.userId]
-                                ?: reply.userName?.takeIf { it.isNotBlank() }
+                            userName = reply.userName?.takeIf { it.isNotBlank() }
+                                ?: userNames[reply.userId]
                                 ?: "User #${reply.userId}"
                         )
                     }
@@ -501,16 +495,26 @@ fun ReviewComment(
 
                         if (replies.isEmpty()) {
                             item(key = "empty_replies") {
-                                Text(
-                                    text = "Chưa có câu trả lời nào.",
-                                    color = Color(0xFF858585),
-                                    fontSize = 13.sp,
-                                    modifier = Modifier.padding(
-                                        start = 60.dp,
-                                        top = 8.dp,
-                                        bottom = 16.dp
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(top = 48.dp, bottom = 24.dp),                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.ChatBubbleOutline,
+                                        contentDescription = "Chưa có bình luận",
+                                        tint = Color(0xFF777777),
+                                        modifier = Modifier.size(60.dp)
                                     )
-                                )
+                                    Spacer(modifier = Modifier.height(12.dp))
+
+                                    Text(
+                                        text = "Chưa có bình luận",
+                                        color = Color(0xFFAAAAAA),
+                                        fontSize = 15.sp
+                                    )
+                                }
                             }
                         } else {
                             items(
@@ -533,7 +537,11 @@ fun ReviewComment(
                                         val username = userNames[reply.userId]
                                             ?: reply.userName?.takeIf { it.isNotBlank() }
                                             ?: "User #${reply.userId}"
-                                        replyText = "@$username "
+                                        val mention = "@$username "
+                                        replyText = TextFieldValue(
+                                            text = mention,
+                                            selection = TextRange(mention.length) // Đưa con trỏ ra sau dấu cách
+                                        )
                                         openReplyInput()
                                     },
                                     onReportClick = {
@@ -576,7 +584,7 @@ fun ReviewComment(
                     replyingTo = mainReview
                 },
                 onSendClick = send@{
-                    if (replyText.isBlank() || isSending) {
+                    if (replyText.text.isBlank() || isSending) {
                         return@send
                     }
 
@@ -595,14 +603,14 @@ fun ReviewComment(
                                 bookId = bookId,
                                 parentReviewId = parent.reviewId,
                                 rating = null,
-                                content = replyText.trim()
+                                content = replyText.text.trim()
                             )
 
                             val response =
                                 RetrofitClient.api.createReview(request)
 
                             if (response.isSuccessful) {
-                                replyText = ""
+                                replyText = TextFieldValue("")
                                 replyingTo = mainReview
                                 loadReviews()
                             } else {
@@ -660,7 +668,7 @@ private fun ReviewCommentItem(
     onReportClick: () -> Unit,
     onDeleteClick: () -> Unit = {} // Callback khi nhấn xóa
 ) {
-    val avatarSize = 42.dp
+    val avatarSize = if (isMainComment) 44.dp else 30.dp
     val contentStart = 56.dp
     val isMyComment = currentUserId != null && review.userId == currentUserId
 
@@ -672,8 +680,10 @@ private fun ReviewCommentItem(
                 else Color(0xFF303030)
             )
             .padding(
-                horizontal = if (isMainComment) 32.dp else 60.dp,
-                vertical = if (isMainComment) 10.dp else 8.dp
+                start = 32.dp, // Dùng chung 32.dp để mép trái Avatar con thẳng hàng với Avatar chính
+                end = 32.dp,   // Dùng chung 32.dp để mép phải nút Like con thẳng hàng với nút Like chính
+                top = if (isMainComment) 10.dp else 6.dp,
+                bottom = if (isMainComment) 10.dp else 4.dp
             )
     ) {
         // --- HÀNG HEADER (Avatar, Tên, và Nút Xóa góc trên) ---
@@ -702,8 +712,7 @@ private fun ReviewCommentItem(
                 Text(
                     text = displayUserName,
                     color = Color.White,
-                    fontSize = 17.sp,
-                    fontWeight = FontWeight.Normal,
+                    fontSize = if (isMainComment) 17.sp else 15.sp, // Review chính giữ nguyên 17.sp, review con giảm xuống 14.sp (hoặc 13.sp)                    fontWeight = FontWeight.Normal,
                     maxLines = 1
                 )
 
@@ -724,9 +733,6 @@ private fun ReviewCommentItem(
                 }
             }
 
-            // GÓC TRÊN BÊN PHẢI:
-            // - Bỏ hẳn icon Flag ở Review chính.
-            // - Review con: Hiện icon Thùng rác đỏ nếu là comment của CHÍNH MÌNH.
             if (!isMainComment && isMyComment) {
                 Icon(
                     imageVector = Icons.Default.Delete,
@@ -743,13 +749,13 @@ private fun ReviewCommentItem(
         Text(
             text = review.content,
             color = Color.White,
-            fontSize = 13.sp,
-            lineHeight = 20.sp,
+            fontSize = if (isMainComment) 15.sp else 13.sp, // Review chính giữ 13.sp, review con giảm còn 12.sp
+            lineHeight = if (isMainComment) 20.sp else 17.sp, // Giảm nhẹ chiều cao dòng cho cân đối
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(
                     start = contentStart,
-                    top = 8.dp,
+                    top = 4.dp,
                     end = 4.dp
                 )
         )
@@ -758,7 +764,7 @@ private fun ReviewCommentItem(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = contentStart, top = 8.dp),
+                .padding(start = contentStart, top = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             if (isMainComment) {
@@ -879,12 +885,12 @@ private fun formatReviewTime(createdAt: String): String {
 
 @Composable
 private fun ReplyInput(
-    text: String,
+    text: TextFieldValue,
     replyTo: ReviewResponse?,
     replyToUserName: String?,
     enabled: Boolean,
     focusRequester: FocusRequester,
-    onTextChange: (String) -> Unit,
+    onTextChange: (TextFieldValue) -> Unit,
     onCancelReply: () -> Unit,
     onSendClick: () -> Unit
 ) {
@@ -892,7 +898,10 @@ private fun ReplyInput(
         modifier = Modifier
             .fillMaxWidth()
             .background(Color(0xFF292929))
-            .imePadding()
+            // Lấy chiều cao bàn phím nhưng TRỪ ĐI chiều cao thanh điều hướng đáy để không bị dư khoảng trống
+            .windowInsetsPadding(
+                WindowInsets.ime.exclude(WindowInsets.navigationBars)
+            )
             .padding(
                 start = 5.dp,
                 end = 5.dp,
@@ -900,67 +909,61 @@ private fun ReplyInput(
                 bottom = 2.dp
             )
     ) {
-        Column {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = Icons.Default.Comment,
+                contentDescription = "Bình luận",
+                tint = Color.White,
+                modifier = Modifier.size(27.dp)
+            )
 
-            Row(
+            Spacer(modifier = Modifier.width(8.dp))
+
+            OutlinedTextField(
+                value = text,
+                onValueChange = onTextChange,
+                enabled = enabled,
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 6.dp),
-                verticalAlignment = Alignment.CenterVertically
+                    .weight(1f)
+                    .focusRequester(focusRequester),
+                placeholder = {
+                    Text(
+                        text = if (replyTo == null) "Thêm bình luận" else "Thêm trả lời",
+                        color = Color(0xFF858585),
+                        fontSize = 15.sp
+                    )
+                },
+                singleLine = true,
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = Color.White,
+                    unfocusedTextColor = Color.White,
+                    focusedBorderColor = Color.Transparent,
+                    unfocusedBorderColor = Color.Transparent,
+                    cursorColor = Color.White,
+                    focusedContainerColor = Color.Transparent,
+                    unfocusedContainerColor = Color.Transparent
+                )
+            )
+
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .clickable(enabled = enabled) {
+                        onSendClick()
+                    },
+                contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    imageVector = Icons.Default.Comment,
-                    contentDescription = "Bình luận",
+                    imageVector = Icons.Default.Send,
+                    contentDescription = "Gửi",
                     tint = Color.White,
                     modifier = Modifier.size(27.dp)
                 )
-
-                Spacer(modifier = Modifier.width(8.dp))
-
-                OutlinedTextField(
-                    value = text,
-                    onValueChange = onTextChange,
-                    enabled = enabled,
-                    modifier = Modifier
-                        .weight(1f)
-                        .focusRequester(focusRequester),
-                    placeholder = {
-                        Text(
-                            text = if (replyTo == null)
-                                "Thêm bình luận"
-                            else
-                                "Thêm trả lời",
-                            color = Color(0xFF858585),
-                            fontSize = 15.sp
-                        )
-                    },
-                    singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = Color.White,
-                        unfocusedTextColor = Color.White,
-                        focusedBorderColor = Color.Transparent,
-                        unfocusedBorderColor = Color.Transparent,
-                        cursorColor = Color.White,
-                        focusedContainerColor = Color.Transparent,
-                        unfocusedContainerColor = Color.Transparent
-                    )
-                )
-
-                Box(
-                    modifier = Modifier
-                        .size(44.dp)
-                        .clickable(enabled = enabled) {
-                            onSendClick()
-                        },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Send,
-                        contentDescription = "Gửi",
-                        tint = Color.White,
-                        modifier = Modifier.size(27.dp)
-                    )
-                }
             }
         }
     }

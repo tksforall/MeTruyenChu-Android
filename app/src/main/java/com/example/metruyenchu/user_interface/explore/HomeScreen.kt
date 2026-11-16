@@ -42,6 +42,9 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.ui.text.style.TextOverflow
 import coil3.compose.AsyncImage
+import androidx.compose.material.icons.automirrored.filled.StarHalf
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.StarBorder
 import com.example.metruyenchu.user_interface.explore.components.BookListItemData
 
 
@@ -624,20 +627,17 @@ fun LatestMainBook(
                 vertical = 10.dp
             )
             .clickable {
-
                 onBookClick()
             },
-
         shape = RoundedCornerShape(8.dp)
     ) {
 
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(
-                    Color(0xFF292929)
-                )
-                .padding(8.dp)
+                .background(Color(0xFF292929))
+                .padding(10.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
 
             Column(
@@ -651,21 +651,19 @@ fun LatestMainBook(
                     fontSize = 12.sp
                 )
 
-                Spacer(
-                    modifier = Modifier.height(5.dp)
-                )
+                Spacer(modifier = Modifier.height(5.dp))
 
                 // TÊN TRUYỆN
                 Text(
                     text = book.title,
                     color = Color.White,
                     fontSize = 15.sp,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
                 )
 
-                Spacer(
-                    modifier = Modifier.height(5.dp)
-                )
+                Spacer(modifier = Modifier.height(5.dp))
 
                 // GIỚI THIỆU
                 Text(
@@ -676,28 +674,21 @@ fun LatestMainBook(
                     overflow = TextOverflow.Ellipsis
                 )
 
+                Spacer(modifier = Modifier.height(8.dp))
 
-                Spacer(
-                    modifier = Modifier.height(8.dp)
-                )
-
-                // RATING
-                Text(
-                    text = "★★★★★  ${book.rating}",
-                    color = Color(0xFFFFC107),
+                // RATING ĐỘNG THEO ĐIỂM SỐ
+                StarRatingRow(
+                    ratingText = book.rating,
+                    starSize = 15.dp,
                     fontSize = 13.sp
                 )
 
-                Spacer(
-                    modifier = Modifier.height(8.dp)
-                )
+                Spacer(modifier = Modifier.height(10.dp))
 
                 Row {
 
                     Button(
-                        onClick = {
-                            onReadClick()
-                        },
+                        onClick = { onReadClick() },
                         modifier = Modifier.height(35.dp),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = Color.Black,
@@ -707,54 +698,38 @@ fun LatestMainBook(
                         Text("Đọc")
                     }
 
-                    Spacer(
-                        modifier = Modifier.width(8.dp)
-                    )
+                    Spacer(modifier = Modifier.width(8.dp))
 
                     Button(
-                        onClick = {
-                            isBookmarked = !isBookmarked
-                        },
+                        onClick = { isBookmarked = !isBookmarked },
                         modifier = Modifier.height(35.dp),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = Color(0xFF2196F3),
                             contentColor = Color.White
                         )
                     ) {
-                        Text(
-                            text = if (isBookmarked) {
-                                "−"
-                            } else {
-                                "+"
-                            }
-                        )
+                        Text(text = if (isBookmarked) "−" else "+")
                     }
                 }
             }
 
-            Spacer(
-                modifier = Modifier.width(10.dp)
-            )
+            Spacer(modifier = Modifier.width(12.dp))
 
+            // ẢNH BÌA TĂNG CHIỀU CAO CHO CÂN VỚI CỘT CHỮ BÊN TRÁI
             AsyncImage(
                 model = book.imageUrl,
-
                 contentDescription = book.title,
-
                 contentScale = ContentScale.Crop,
-
                 modifier = Modifier
-                    .size(
-                        width = 105.dp,
-                        height = 145.dp
-                    )
-                    .clip(
-                        RoundedCornerShape(7.dp)
-                    )
+                    .width(116.dp)
+                    .height(168.dp)
+                    .clip(RoundedCornerShape(7.dp))
             )
         }
     }
 }
+
+
 // ==========================================================
 // PLACEHOLDER CHO TRUYỆN ĐANG ĐƯỢC CHỌN
 // ==========================================================
@@ -1165,7 +1140,6 @@ fun CompletedBookItem(
             .clickable {
                 onBookClick()
             },
-
         verticalAlignment = Alignment.CenterVertically
     ) {
 
@@ -1176,14 +1150,10 @@ fun CompletedBookItem(
             modifier = Modifier
                 .width(55.dp)
                 .height(80.dp)
-                .clip(
-                    RoundedCornerShape(7.dp)
-                )
+                .clip(RoundedCornerShape(7.dp))
         )
 
-        Spacer(
-            modifier = Modifier.width(7.dp)
-        )
+        Spacer(modifier = Modifier.width(7.dp))
 
         Column(
             modifier = Modifier.weight(1f)
@@ -1199,9 +1169,7 @@ fun CompletedBookItem(
                 lineHeight = 14.sp
             )
 
-            Spacer(
-                modifier = Modifier.height(4.dp)
-            )
+            Spacer(modifier = Modifier.height(4.dp))
 
             Text(
                 text = book.genre,
@@ -1211,17 +1179,57 @@ fun CompletedBookItem(
                 overflow = TextOverflow.Ellipsis
             )
 
-            Spacer(
-                modifier = Modifier.height(4.dp)
-            )
+            Spacer(modifier = Modifier.height(4.dp))
 
-            Text(
-                text = "★★★★★  ${book.rating}",
-                color = Color(0xFFFFC107),
-                fontSize = 10.sp,
-                maxLines = 1
+            StarRatingRow(
+                ratingText = book.rating,
+                starSize = 12.dp,
+                fontSize = 10.sp
             )
         }
+    }
+}
+
+
+// ==========================================================
+// HIỂN THỊ 5 SAO ĐỘNG THEO ĐIỂM RATING (VD: 4.0 -> 4 SAO VÀNG, 1 SAO RỖNG)
+// ==========================================================
+
+@Composable
+fun StarRatingRow(
+    ratingText: String,
+    starSize: androidx.compose.ui.unit.Dp = 15.dp,
+    fontSize: androidx.compose.ui.unit.TextUnit = 13.sp
+) {
+    // Chuyển "4,0" hoặc "4.0" sang số Double an toàn
+    val score = ratingText.replace(",", ".").toDoubleOrNull()?.coerceIn(0.0, 5.0) ?: 0.0
+
+    Row(
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        for (i in 1..5) {
+            val icon = when {
+                score >= i -> Icons.Default.Star
+                score >= i - 0.5 -> Icons.AutoMirrored.Filled.StarHalf
+                else -> Icons.Default.StarBorder
+            }
+
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = Color(0xFFFFC107),
+                modifier = Modifier.size(starSize)
+            )
+        }
+
+        Spacer(modifier = Modifier.width(6.dp))
+
+        Text(
+            text = ratingText,
+            color = Color(0xFFFFC107),
+            fontSize = fontSize,
+            fontWeight = FontWeight.Medium
+        )
     }
 }
 

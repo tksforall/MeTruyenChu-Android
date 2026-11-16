@@ -282,7 +282,6 @@ fun SearchScreen(
             .background(
                 Color(0xFF292929)
             )
-            .statusBarsPadding()
     ) {
 
 

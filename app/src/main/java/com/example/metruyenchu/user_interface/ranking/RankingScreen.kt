@@ -143,65 +143,46 @@ fun RankingScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(Color(0xFF292929))
-            .statusBarsPadding()
     ) {
 
         // ==========================================
         // HEADER
         // ==========================================
 
+
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(58.dp)
                 .padding(horizontal = 16.dp),
-
             verticalAlignment = Alignment.CenterVertically
         ) {
 
             Image(
                 painter = painterResource(
-                    id = R.drawable.ic_launcher_foreground
+                    id = R.drawable.logo_mtc
                 ),
-
                 contentDescription = "Logo Mê Truyện Chữ",
-
-                contentScale = ContentScale.Crop,
-
+                contentScale = ContentScale.Fit,
                 modifier = Modifier
-                    .size(36.dp)
-                    .clip(
-                        RoundedCornerShape(8.dp)
-                    )
+                    .size(50.dp)
+                    .clip(RoundedCornerShape(8.dp))
             )
-
 
             Spacer(
                 modifier = Modifier.weight(1f)
             )
 
-
             Box(
                 modifier = Modifier
-                    .clip(
-                        RoundedCornerShape(16.dp)
-                    )
-                    .background(
-                        Color(0xFF333333)
-                    )
-                    .padding(
-                        horizontal = 12.dp,
-                        vertical = 6.dp
-                    )
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(Color(0xFF333333))
+                    .padding(horizontal = 12.dp, vertical = 6.dp)
             ) {
-
                 Text(
                     text = "$currentMonth/$currentYear",
-
                     color = Color(0xFFAAAAAA),
-
                     fontSize = 12.sp,
-
                     fontWeight = FontWeight.Medium
                 )
             }
@@ -263,7 +244,8 @@ fun RankingScreen(
         LazyColumn(
             modifier = Modifier
                 .fillMaxWidth()
-                .weight(1f),
+                .weight(1f)
+                .background(Color(0xFF343434)),
 
             contentPadding = PaddingValues(
                 start = 14.dp,

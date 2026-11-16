@@ -7,290 +7,293 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.NotificationsOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-
-
-// ==========================================================
-// BOTTOM SHEET CỦA TRUYỆN
-// ==========================================================
+import coil3.compose.AsyncImage
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LibraryStoryBottomSheet(
     title: String,
-
+    coverUrl: String? = null,
+    showNotificationOption: Boolean = false,
+    isNotificationEnabled: Boolean = false,
+    onToggleNotification: (Boolean) -> Unit = {},
     onDismiss: () -> Unit = {},
-
     onDownloadClick: (fromChapter: String, toChapter: String) -> Unit = { _, _ -> },
-
     onDeleteClick: () -> Unit = {}
 ) {
-
-    // ======================================================
-    // TRẠNG THÁI DIALOG TẢI TRUYỆN
-    // ======================================================
-
-    var showDownloadDialog by remember {
-        mutableStateOf(false)
-    }
-
-
-    // ======================================================
-    // HIỆN BOTTOM SHEET
-    // ======================================================
+    var showDownloadDialog by remember { mutableStateOf(false) }
+    var showDeleteConfirmDialog by remember { mutableStateOf(false) }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         containerColor = Color(0xFF292929)
     ) {
-
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(bottom = 30.dp)
+                .padding(bottom = 26.dp)
         ) {
-
             // ==================================================
-            // TÊN TRUYỆN
+            // 1. HEADER: ẢNH BÌA + TÊN TRUYỆN (CHỮ BÌNH THƯỜNG)
             // ==================================================
-
-            Text(
-                text = title,
-                color = Color.White,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Medium,
-                modifier = Modifier.padding(
-                    start = 20.dp,
-                    end = 20.dp,
-                    top = 10.dp,
-                    bottom = 18.dp
-                )
-            )
-
-
-            Divider(
-                color = Color(0xFF444444)
-            )
-
-
-            // ==================================================
-            // TẢI TRUYỆN
-            // ==================================================
-
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable {
-
-                        // Mở Dialog
-                        showDownloadDialog = true
-
-                    }
-                    .padding(
-                        horizontal = 20.dp,
-                        vertical = 18.dp
-                    ),
-
+                    .padding(start = 20.dp, end = 20.dp, top = 6.dp, bottom = 16.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                Box(
+                    modifier = Modifier
+                        .width(52.dp)
+                        .height(72.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(Color.DarkGray),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (!coverUrl.isNullOrBlank()) {
+                        AsyncImage(
+                            model = coverUrl,
+                            contentDescription = title,
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop
+                        )
+                    }
+                }
 
-                Icon(
-                    imageVector = Icons.Default.CloudDownload,
-                    contentDescription = "Tải truyện",
-                    tint = Color.White,
-                    modifier = Modifier.size(25.dp)
-                )
-
-                Spacer(
-                    modifier = Modifier.width(16.dp)
-                )
+                Spacer(modifier = Modifier.width(16.dp))
 
                 Text(
-                    text = "Tải truyện",
+                    text = title,
                     color = Color.White,
-                    fontSize = 16.sp
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Light,
+                    maxLines = 2,
+                    modifier = Modifier.weight(1f)
                 )
             }
 
-
-            Divider(
-                color = Color(0xFF444444)
-            )
-
+            HorizontalDivider(color = Color(0xFF444444))
 
             // ==================================================
-            // XÓA TRUYỆN
+            // 2. TẢI TRUYỆN
             // ==================================================
-
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable {
-
-                        onDeleteClick()
-
-                    }
-                    .padding(
-                        horizontal = 20.dp,
-                        vertical = 18.dp
-                    ),
-
+                    .clickable { showDownloadDialog = true }
+                    .padding(horizontal = 20.dp, vertical = 16.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                Icon(
+                    imageVector = Icons.Default.CloudDownload,
+                    contentDescription = "Tải truyện",
+                    tint = Color(0xFFBDBDBD),
+                    modifier = Modifier.size(24.dp)
+                )
+                Spacer(modifier = Modifier.width(16.dp))
+                Text(
+                    text = "Tải truyện",
+                    color = Color.White,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Light
+                )
+            }
 
+            HorizontalDivider(color = Color(0xFF444444))
+
+            // ==================================================
+            // 3. XÓA KHỎI TỦ TRUYỆN (BẤM VÀO HIỆN DIALOG XÁC NHẬN)
+            // ==================================================
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { showDeleteConfirmDialog = true }
+                    .padding(horizontal = 20.dp, vertical = 16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Icon(
                     imageVector = Icons.Default.Delete,
-                    contentDescription = "Xóa",
-                    tint = Color.White,
-                    modifier = Modifier.size(25.dp)
+                    contentDescription = "Xóa khỏi Tủ Truyện",
+                    tint = Color(0xFFBDBDBD),
+                    modifier = Modifier.size(24.dp)
                 )
-
-                Spacer(
-                    modifier = Modifier.width(16.dp)
-                )
-
+                Spacer(modifier = Modifier.width(16.dp))
                 Text(
                     text = "Xóa khỏi Tủ Truyện",
                     color = Color.White,
-                    fontSize = 16.sp
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Light
                 )
+            }
+
+            // ==================================================
+            // 4. NHẬN THÔNG BÁO (CHỈ HIỆN Ở LỊCH SỬ)
+            // ==================================================
+            if (showNotificationOption) {
+                HorizontalDivider(color = Color(0xFF444444))
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onToggleNotification(!isNotificationEnabled) }
+                        .padding(horizontal = 20.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = if (isNotificationEnabled) {
+                            Icons.Default.Notifications
+                        } else {
+                            Icons.Default.NotificationsOff
+                        },
+                        contentDescription = "Nhận thông báo",
+                        tint = if (isNotificationEnabled) Color.White else Color(0xFFBDBDBD),
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Text(
+                        text = "Nhận thông báo",
+                        color = Color.White,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Light,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Switch(
+                        checked = isNotificationEnabled,
+                        onCheckedChange = { onToggleNotification(it) },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color.White,
+                            checkedTrackColor = Color(0xFF1976D2),
+                            uncheckedThumbColor = Color.White,
+                            uncheckedTrackColor = Color(0xFF555555),
+                            uncheckedBorderColor = Color.Transparent
+                        )
+                    )
+                }
             }
         }
     }
 
-
     // ======================================================
-    // DIALOG TẢI TRUYỆN
+    // DIALOG XÁC NHẬN XÓA KHỎI TỦ TRUYỆN
     // ======================================================
-
-    if (showDownloadDialog) {
-
-        DownloadChapterDialog(
-
-            onDismiss = {
-                showDownloadDialog = false
-            },
-
-            onConfirm = { fromChapter, toChapter ->
-
-                // Gửi thông tin ra ngoài
-                onDownloadClick(
-                    fromChapter,
-                    toChapter
+    if (showDeleteConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirmDialog = false },
+            containerColor = Color(0xFF4A4A4A),
+            text = {
+                Text(
+                    text = "Bạn có chắc chắn muốn xóa khỏi tủ truyện?",
+                    color = Color.White,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Normal
                 )
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showDeleteConfirmDialog = false }
+                ) {
+                    Text(
+                        text = "Hủy",
+                        color = Color.Red,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Normal
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showDeleteConfirmDialog = false
+                        onDeleteClick()
+                    }
+                ) {
+                    Text(
+                        text = "Đồng ý",
+                        color = Color.Black,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Normal
+                    )
+                }
+            }
+        )
+    }
 
-                // Đóng dialog
+    // ======================================================
+    // DIALOG TẢI TRUYỆN (NHỎ GỌN, KHOẢNG CÁCH HẸP, NỀN XÁM)
+    // ======================================================
+    if (showDownloadDialog) {
+        DownloadChapterDialog(
+            onDismiss = { showDownloadDialog = false },
+            onConfirm = { fromChapter, toChapter ->
+                onDownloadClick(fromChapter, toChapter)
                 showDownloadDialog = false
-
-                // Đồng thời đóng BottomSheet
                 onDismiss()
             }
         )
     }
 }
 
-
-// ==========================================================
-// DIALOG NHẬP KHOẢNG CHƯƠNG
-// ==========================================================
-
 @Composable
 private fun DownloadChapterDialog(
     onDismiss: () -> Unit,
     onConfirm: (String, String) -> Unit
 ) {
-
-    // ======================================================
-    // GIÁ TRỊ NHẬP
-    // ======================================================
-
-    var fromChapter by remember {
-        mutableStateOf("")
-    }
-
-    var toChapter by remember {
-        mutableStateOf("")
-    }
-
+    var fromChapter by remember { mutableStateOf("") }
+    var toChapter by remember { mutableStateOf("") }
 
     AlertDialog(
-
         onDismissRequest = onDismiss,
-
-        // ==================================================
-        // TIÊU ĐỀ
-        // ==================================================
-
+        containerColor = Color(0xFF4A4A4A),
         title = {
-
             Text(
                 text = "Bạn muốn tải",
                 color = Color.White,
-                fontSize = 22.sp
+                fontSize = 17.sp,
+                fontWeight = FontWeight.Normal
             )
         },
-
-
-        // ==================================================
-        // NỘI DUNG
-        // ==================================================
-
         text = {
-
             Column(
                 modifier = Modifier.fillMaxWidth()
             ) {
-
-                // ------------------------------------------
-                // TỪ CHƯƠNG
-                // ------------------------------------------
-
                 Text(
                     text = "Từ chương",
-                    color = Color(0xFFBDBDBD),
-                    fontSize = 15.sp
+                    color = Color(0xFFD0D0D0),
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Normal
                 )
 
                 OutlinedTextField(
                     value = fromChapter,
-
-                    onValueChange = {
-                        fromChapter = it
-                    },
-
-                    modifier = Modifier.fillMaxWidth(),
-
+                    onValueChange = { fromChapter = it },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(46.dp),
                     singleLine = true,
-
+                    textStyle = LocalTextStyle.current.copy(
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Normal
+                    ),
                     colors = TextFieldDefaults.colors(
-
-                        focusedContainerColor =
-                            Color.Transparent,
-
-                        unfocusedContainerColor =
-                            Color.Transparent,
-
-                        focusedIndicatorColor =
-                            Color.Transparent,
-
-                        unfocusedIndicatorColor =
-                            Color.Transparent,
-
-                        focusedTextColor =
-                            Color.White,
-
-                        unfocusedTextColor =
-                            Color.White,
-
-                        cursorColor =
-                            Color.White
+                        focusedContainerColor = Color.Transparent,
+                        unfocusedContainerColor = Color.Transparent,
+                        focusedIndicatorColor = Color.Transparent,
+                        unfocusedIndicatorColor = Color.Transparent,
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White,
+                        cursorColor = Color.White
                     )
                 )
 
@@ -298,58 +301,37 @@ private fun DownloadChapterDialog(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(1.dp)
-                        .background(Color(0xFF222222))
+                        .background(Color(0xFF777777))
                 )
 
-
-                Spacer(
-                    modifier = Modifier.height(22.dp)
-                )
-
-
-                // ------------------------------------------
-                // ĐẾN CHƯƠNG
-                // ------------------------------------------
+                Spacer(modifier = Modifier.height(10.dp))
 
                 Text(
                     text = "Đến chương",
-                    color = Color(0xFFBDBDBD),
-                    fontSize = 15.sp
+                    color = Color(0xFFD0D0D0),
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Normal
                 )
 
                 OutlinedTextField(
                     value = toChapter,
-
-                    onValueChange = {
-                        toChapter = it
-                    },
-
-                    modifier = Modifier.fillMaxWidth(),
-
+                    onValueChange = { toChapter = it },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(46.dp),
                     singleLine = true,
-
+                    textStyle = LocalTextStyle.current.copy(
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Normal
+                    ),
                     colors = TextFieldDefaults.colors(
-
-                        focusedContainerColor =
-                            Color.Transparent,
-
-                        unfocusedContainerColor =
-                            Color.Transparent,
-
-                        focusedIndicatorColor =
-                            Color.Transparent,
-
-                        unfocusedIndicatorColor =
-                            Color.Transparent,
-
-                        focusedTextColor =
-                            Color.White,
-
-                        unfocusedTextColor =
-                            Color.White,
-
-                        cursorColor =
-                            Color.White
+                        focusedContainerColor = Color.Transparent,
+                        unfocusedContainerColor = Color.Transparent,
+                        focusedIndicatorColor = Color.Transparent,
+                        unfocusedIndicatorColor = Color.Transparent,
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White,
+                        cursorColor = Color.White
                     )
                 )
 
@@ -361,58 +343,31 @@ private fun DownloadChapterDialog(
                 )
             }
         },
-
-
-        // ==================================================
-        // NÚT HỦY
-        // ==================================================
-
         dismissButton = {
-
-            TextButton(
-                onClick = onDismiss
-            ) {
-
+            TextButton(onClick = onDismiss) {
                 Text(
                     text = "Hủy",
                     color = Color.Red,
-                    fontSize = 16.sp
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Normal
                 )
             }
         },
-
-
-        // ==================================================
-        // NÚT ĐỒNG Ý
-        // ==================================================
-
         confirmButton = {
-
             TextButton(
                 onClick = {
-
-                    // Chỉ gửi khi có dữ liệu
-                    if (
-                        fromChapter.isNotBlank() &&
-                        toChapter.isNotBlank()
-                    ) {
-
-                        onConfirm(
-                            fromChapter,
-                            toChapter
-                        )
+                    if (fromChapter.isNotBlank() && toChapter.isNotBlank()) {
+                        onConfirm(fromChapter, toChapter)
                     }
                 }
             ) {
-
                 Text(
                     text = "Đồng ý",
                     color = Color.Black,
-                    fontSize = 16.sp
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Normal
                 )
             }
-        },
-
-        containerColor = Color(0xFF4A4A4A)
+        }
     )
 }

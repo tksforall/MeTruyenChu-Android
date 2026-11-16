@@ -127,76 +127,41 @@ class BookReviewViewModel : ViewModel() {
         bookId: Long,
         rating: Double?,
         content: String,
-        onSuccess: (ReviewResponse) -> Unit = {},
+        onSuccess: (ReviewResponse?) -> Unit = {},
         onError: (String) -> Unit = {}
     ) {
-
         viewModelScope.launch {
-
             _isCreatingReview.value = true
             _createReviewError.value = null
 
             try {
+                val request = ReviewCreateRequest(
+                    bookId = bookId,
+                    parentReviewId = null,
+                    chapterId = null,
+                    rating = rating,
+                    content = content
+                )
 
-                val request =
-                    ReviewCreateRequest(
-                        bookId = bookId,
-                        parentReviewId = null,
-                        chapterId = null,
-                        rating = rating,
-                        content = content
-                    )
-
-                val response =
-                    RetrofitClient.api
-                        .createReview(request)
+                val response = RetrofitClient.api.createReview(request)
 
                 if (response.isSuccessful) {
-
-                    val newReview =
-                        response.body()
-
+                    val newReview = response.body()
                     if (newReview != null) {
-
-                        _reviews.value =
-                            _reviews.value + newReview
-
-                        onSuccess(newReview)
-
-                    } else {
-
-                        val message =
-                            "Backend không trả về dữ liệu review"
-
-                        _createReviewError.value =
-                            message
-
-                        onError(message)
+                        _reviews.value = _reviews.value + newReview
                     }
-
+                    // Gọi onSuccess ngay khi HTTP 2xx thành công, kể cả khi body rỗng
+                    onSuccess(newReview)
                 } else {
-
-                    val message =
-                        "Không thể đăng đánh giá (${response.code()})"
-
-                    _createReviewError.value =
-                        message
-
+                    val message = "Không thể đăng đánh giá (${response.code()})"
+                    _createReviewError.value = message
                     onError(message)
                 }
-
             } catch (e: Exception) {
-
-                val message =
-                    e.message ?: "Lỗi kết nối"
-
-                _createReviewError.value =
-                    message
-
+                val message = e.message ?: "Lỗi kết nối"
+                _createReviewError.value = message
                 onError(message)
-
             } finally {
-
                 _isCreatingReview.value = false
             }
         }

@@ -2,30 +2,15 @@ package com.example.metruyenchu.user_interface.notification
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -33,265 +18,147 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.foundation.layout.statusBarsPadding
+import com.example.metruyenchu.api.NotificationResponse
+import com.example.metruyenchu.api.RetrofitClient
 import com.example.metruyenchu.user_interface.notification.components.NotificationDivider
 import com.example.metruyenchu.user_interface.notification.components.NotificationItem
-
-
-// ==========================================================
-// NOTIFICATION SCREEN
-// ==========================================================
+import kotlinx.coroutines.launch
 
 @Composable
 fun NotificationScreen(
-    onBack: () -> Unit = {}
+    onBack: () -> Unit = {},
+    onNavigateToBook: (Long) -> Unit = {},
+    onNavigateToComment: (Long) -> Unit = {}
 ) {
+    val scope = rememberCoroutineScope()
 
-    // ======================================================
-    // TRẠNG THÁI MENU SẮP XẾP
-    // ======================================================
+    var sortMenuExpanded by remember { mutableStateOf(false) }
+    var selectedSort by remember { mutableStateOf("Mới nhất") }
 
-    // false = menu đang đóng
-    // true  = menu đang mở
-    var sortMenuExpanded by remember {
-        mutableStateOf(false)
+    var rawNotifications by remember { mutableStateOf<List<NotificationResponse>>(emptyList()) }
+    var isLoading by remember { mutableStateOf(true) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+
+    // Tải danh sách thông báo từ API
+    LaunchedEffect(Unit) {
+        isLoading = true
+        try {
+            val res = RetrofitClient.api.getMyNotifications()
+            if (res.isSuccessful) {
+                rawNotifications = res.body().orEmpty()
+                errorMessage = null
+            } else {
+                errorMessage = "Không tải được thông báo (${res.code()})"
+            }
+        } catch (e: Exception) {
+            errorMessage = "Lỗi kết nối: ${e.message}"
+        } finally {
+            isLoading = false
+        }
     }
 
+    // Sắp xếp danh sách theo lựa chọn "Mới nhất" / "Cũ nhất"
+    val sortedList = remember(rawNotifications, selectedSort) {
+        val sorted = if (selectedSort == "Mới nhất") {
+            rawNotifications.sortedByDescending { it.createdAt ?: it.notificationId.toString() }
+        } else {
+            rawNotifications.sortedBy { it.createdAt ?: it.notificationId.toString() }
+        }
 
-    // ======================================================
-    // THỨ TỰ HIỆN TẠI
-    // ======================================================
+        sorted.map { dto ->
+            val notiType = when (dto.type.uppercase()) {
+                "NEW_CHAPTER" -> NotificationType.NEW_CHAPTER
+                "BOOK_UPDATE" -> NotificationType.BOOK_UPDATE
+                "COMMENT_REPLY" -> NotificationType.COMMENT_REPLY
+                else -> NotificationType.SYSTEM
+            }
 
-    // Mặc định là "Mới nhất".
-    var selectedSort by remember {
-        mutableStateOf("Mới nhất")
+            Notification(
+                id = dto.notificationId.toString(),
+                type = notiType,
+                title = dto.title,
+                content = dto.content,
+                time = formatNotificationTime(dto.createdAt),
+                bookId = dto.bookId?.toString(),
+                isRead = dto.isRead == 1
+            )
+        }
     }
-
-
-    // ======================================================
-    // DỮ LIỆU SKELETON
-    // ======================================================
-
-    // Tạo 3 thông báo giả để xem UI.
-    val notifications = listOf(
-
-        // --------------------------------------------------
-        // THÔNG BÁO CHƯƠNG MỚI
-        // --------------------------------------------------
-
-        Notification(
-            id = "1",
-
-            type = NotificationType.NEW_CHAPTER,
-
-            title = "Tên Truyện",
-
-            content = "Chương 125 đã được cập nhật.",
-
-            time = "10 phút trước",
-
-            bookId = "book_001",
-
-            chapterId = "chapter_125",
-
-            isRead = false
-        ),
-
-
-        // --------------------------------------------------
-        // THÔNG BÁO BÌNH LUẬN
-        // --------------------------------------------------
-
-        Notification(
-            id = "2",
-
-            type = NotificationType.COMMENT_REPLY,
-
-            title = "Tên Truyện",
-
-            content = "Bình luận: aaa bbb ccc\nCó người đã trả lời bình luận của bạn.",
-
-            time = "1 giờ trước",
-
-            bookId = "book_001",
-
-            commentId = "comment_001",
-
-            isRead = false
-        ),
-
-
-        // --------------------------------------------------
-        // CHƯƠNG MỚI
-        // --------------------------------------------------
-
-        Notification(
-            id = "3",
-
-            type = NotificationType.NEW_CHAPTER,
-
-            title = "Tên Truyện",
-
-            content = "Chương 89 đã được cập nhật.",
-
-            time = "Hôm qua",
-
-            bookId = "book_002",
-
-            chapterId = "chapter_089",
-
-            isRead = true
-        )
-    )
-
-
-    // ======================================================
-    // TOÀN BỘ SCREEN
-    // ======================================================
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(Color(0xFF292929))
-            .statusBarsPadding()
     ) {
-
-
         // ==================================================
-        // HEADER
+        // HEADER (CHIA ROW RÕ RÀNG KHÔNG ĐÈ CHỮ)
         // ==================================================
-
-        Box(
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(64.dp)
+                .padding(horizontal = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-
-            // ----------------------------------------------
-            // NÚT QUAY LẠI
-            // ----------------------------------------------
-
-            IconButton(
-                onClick = onBack,
-                modifier = Modifier.align(
-                    Alignment.CenterStart
-                )
-            ) {
-
+            IconButton(onClick = onBack) {
                 Icon(
                     imageVector = Icons.Default.ArrowBack,
-
                     contentDescription = "Quay lại",
-
                     tint = Color.White,
-
-                    modifier = Modifier.size(30.dp)
+                    modifier = Modifier.size(28.dp)
                 )
             }
 
-
-            // ----------------------------------------------
-            // TIÊU ĐỀ
-            // ----------------------------------------------
-
             Text(
                 text = "Thông Báo",
-
                 color = Color.White,
-
-                fontSize = 23.sp,
-
+                fontSize = 21.sp,
                 fontWeight = FontWeight.Medium,
-
-                modifier = Modifier.align(
-                    Alignment.Center
-                )
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(start = 4.dp)
             )
 
-
-            // ----------------------------------------------
             // NÚT SẮP XẾP
-            // ----------------------------------------------
-
-            Box(
-                modifier = Modifier
-                    .align(Alignment.CenterEnd)
-                    .padding(end = 8.dp)
-            ) {
-
+            Box {
                 Row(
                     modifier = Modifier
-                        .clip(
-                            RoundedCornerShape(16.dp)
-                        )
-                        .background(
-                            Color(0xFF3A3A3A)
-                        )
-                        .clickable {
-                            sortMenuExpanded = true
-                        }
-                        .padding(
-                            horizontal = 10.dp,
-                            vertical = 6.dp
-                        ),
-
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(Color(0xFF3A3A3A))
+                        .clickable { sortMenuExpanded = true }
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-
-                    // Tên kiểu sắp xếp hiện tại
                     Text(
                         text = selectedSort,
-
                         color = Color.White,
-
-                        fontSize = 12.sp
+                        fontSize = 13.sp,
+                        maxLines = 1,
+                        softWrap = false
                     )
-
-
-                    // Mũi tên xuống
+                    Spacer(modifier = Modifier.width(4.dp))
                     Icon(
                         imageVector = Icons.Default.KeyboardArrowDown,
-
                         contentDescription = "Sắp xếp",
-
                         tint = Color.White,
-
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(18.dp)
                     )
                 }
 
-
-                // ==========================================
-                // MENU SẮP XẾP
-                // ==========================================
-
                 DropdownMenu(
                     expanded = sortMenuExpanded,
-
-                    onDismissRequest = {
-                        sortMenuExpanded = false
-                    }
+                    onDismissRequest = { sortMenuExpanded = false },
+                    modifier = Modifier.background(Color(0xFF3A3A3A))
                 ) {
-
-                    // Mới nhất
                     DropdownMenuItem(
-                        text = {
-                            Text("Mới nhất")
-                        },
-
+                        text = { Text("Mới nhất", color = Color.White, fontSize = 14.sp) },
                         onClick = {
                             selectedSort = "Mới nhất"
                             sortMenuExpanded = false
                         }
                     )
-
-
-                    // Cũ nhất
                     DropdownMenuItem(
-                        text = {
-                            Text("Cũ nhất")
-                        },
-
+                        text = { Text("Cũ nhất", color = Color.White, fontSize = 14.sp) },
                         onClick = {
                             selectedSort = "Cũ nhất"
                             sortMenuExpanded = false
@@ -301,59 +168,110 @@ fun NotificationScreen(
             }
         }
 
-
-        // ==================================================
-        // ĐƯỜNG PHÂN CÁCH HEADER
-        // ==================================================
-
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(1.dp)
-                .background(
-                    Color(0xFF3A3A3A)
-                )
+                .background(Color(0xFF3A3A3A))
         )
-
 
         // ==================================================
         // DANH SÁCH THÔNG BÁO
         // ==================================================
+        Box(modifier = Modifier.fillMaxSize()) {
+            when {
+                isLoading -> {
+                    CircularProgressIndicator(
+                        color = Color.White,
+                        modifier = Modifier.align(Alignment.Center)
+                    )
+                }
+                errorMessage != null -> {
+                    Text(
+                        text = errorMessage!!,
+                        color = Color.White,
+                        modifier = Modifier.align(Alignment.Center)
+                    )
+                }
+                sortedList.isEmpty() -> {
+                    Text(
+                        text = "Không có thông báo nào",
+                        color = Color(0xFFAAAAAA),
+                        modifier = Modifier.align(Alignment.Center)
+                    )
+                }
+                else -> {
+                    LazyColumn(modifier = Modifier.fillMaxSize()) {
+                        itemsIndexed(
+                            items = sortedList,
+                            key = { _, item -> item.id }
+                        ) { index, notification ->
+                            NotificationItem(
+                                notification = notification,
+                                onClick = {
+                                    val notiId = notification.id.toLongOrNull() ?: return@NotificationItem
 
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-        ) {
+                                    // 1. Đánh dấu đã đọc nếu chưa đọc (đổi nền sang xám)
+                                    if (!notification.isRead) {
+                                        rawNotifications = rawNotifications.map {
+                                            if (it.notificationId == notiId) it.copy(isRead = 1) else it
+                                        }
+                                        scope.launch {
+                                            try {
+                                                RetrofitClient.api.markNotificationRead(notiId)
+                                            } catch (_: Exception) {}
+                                        }
+                                    }
 
-            // Duyệt qua từng notification
-            notifications.forEachIndexed { index, notification ->
+                                    // 2. Điều hướng theo loại thông báo
+                                    val bId = notification.bookId?.toLongOrNull()
+                                    when (notification.type) {
+                                        NotificationType.NEW_CHAPTER,
+                                        NotificationType.BOOK_UPDATE -> {
+                                            if (bId != null) onNavigateToBook(bId)
+                                        }
+                                        NotificationType.COMMENT_REPLY -> {
+                                            if (bId != null) onNavigateToComment(bId)
+                                        }
+                                        NotificationType.SYSTEM -> {
+                                            // Thông báo hệ thống: không làm gì thêm
+                                        }
+                                    }
+                                },
+                                onDelete = {
+                                    val notiId = notification.id.toLongOrNull() ?: return@NotificationItem
+                                    rawNotifications = rawNotifications.filterNot { it.notificationId == notiId }
+                                    scope.launch {
+                                        try {
+                                            RetrofitClient.api.deleteNotification(notiId)
+                                        } catch (_: Exception) {}
+                                    }
+                                }
+                            )
 
-                NotificationItem(
-                    notification = notification,
-
-                    onClick = {
-
-                        // ==============================
-                        // TODO: NAVIGATION
-                        // ==============================
-
-                        // Nếu là NEW_CHAPTER:
-                        // → mở đúng chapter.
-
-                        // Nếu là COMMENT_REPLY:
-                        // → mở đúng comment.
-
-                        // Phần này làm sau.
+                            if (index < sortedList.lastIndex) {
+                                NotificationDivider()
+                            }
+                        }
                     }
-                )
-
-
-                // Không tạo đường kẻ sau item cuối.
-                if (index < notifications.lastIndex) {
-
-                    NotificationDivider()
                 }
             }
         }
+    }
+}
+
+private fun formatNotificationTime(createdAt: String?): String {
+    if (createdAt.isNullOrBlank()) return ""
+    // Cắt chuỗi ISO "2026-09-17T12:19:27..." thành "17/09/2026 12:19"
+    return try {
+        val datePart = createdAt.substringBefore("T").split("-")
+        val timePart = createdAt.substringAfter("T", "").take(5)
+        if (datePart.size == 3) {
+            "${datePart[2]}/${datePart[1]}/${datePart[0]} $timePart".trim()
+        } else {
+            createdAt
+        }
+    } catch (_: Exception) {
+        createdAt
     }
 }

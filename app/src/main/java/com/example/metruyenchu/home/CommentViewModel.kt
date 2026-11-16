@@ -122,9 +122,10 @@ class CommentViewModel : ViewModel() {
                                 userId =
                                     comment.userId,
 
-                                userName =
-                                    user?.userName
-                                        ?: "User",
+                                userName = comment.userName
+                                    ?.takeIf { it.isNotBlank() }
+                                    ?: user?.userName?.takeIf { it.isNotBlank() }
+                                    ?: "User #${comment.userId}",
 
                                 avatarUrl =
                                     user?.avatarUrl,

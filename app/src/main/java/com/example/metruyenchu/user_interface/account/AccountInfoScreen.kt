@@ -252,7 +252,7 @@ fun AccountInfoScreen(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(80.dp)
+                .height(56.dp)
                 .padding(horizontal = 44.dp),
 
             verticalAlignment = Alignment.CenterVertically
@@ -335,6 +335,10 @@ fun AccountInfoScreen(
         // GIỚI TÍNH
         // ==================================================
 
+        // ==================================================
+        // GIỚI TÍNH
+        // ==================================================
+
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -342,7 +346,6 @@ fun AccountInfoScreen(
                     horizontal = 44.dp,
                     vertical = 16.dp
                 ),
-
             verticalAlignment = Alignment.CenterVertically
         ) {
 
@@ -353,15 +356,15 @@ fun AccountInfoScreen(
             )
 
             Spacer(
-                modifier = Modifier.width(35.dp)
+                modifier = Modifier.width(20.dp)
             )
 
             GenderSelector(
                 selectedGender = selectedGender,
-
                 onGenderSelected = {
                     selectedGender = it
-                }
+                },
+                modifier = Modifier.weight(1f)
             )
         }
 
@@ -423,7 +426,7 @@ private fun AccountInfoRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(80.dp)
+            .height(56.dp)
             .padding(horizontal = 44.dp),
 
         verticalAlignment = Alignment.CenterVertically
@@ -469,11 +472,12 @@ private fun AccountDivider() {
 @Composable
 private fun GenderSelector(
     selectedGender: String,
-    onGenderSelected: (String) -> Unit
+    onGenderSelected: (String) -> Unit,
+    modifier: Modifier = Modifier
 ) {
 
     Row(
-        modifier = Modifier
+        modifier = modifier
             .height(50.dp)
             .clip(RoundedCornerShape(28.dp))
             .background(Color(0xFF444444)),
@@ -483,25 +487,22 @@ private fun GenderSelector(
         GenderItem(
             text = "Bí mật",
             selected = selectedGender == "Bí mật",
-            onClick = {
-                onGenderSelected("Bí mật")
-            }
+            onClick = { onGenderSelected("Bí mật") },
+            modifier = Modifier.weight(1f)
         )
 
         GenderItem(
             text = "Nam",
             selected = selectedGender == "Nam",
-            onClick = {
-                onGenderSelected("Nam")
-            }
+            onClick = { onGenderSelected("Nam") },
+            modifier = Modifier.weight(1f)
         )
 
         GenderItem(
             text = "Nữ",
             selected = selectedGender == "Nữ",
-            onClick = {
-                onGenderSelected("Nữ")
-            }
+            onClick = { onGenderSelected("Nữ") },
+            modifier = Modifier.weight(1f)
         )
     }
 }
@@ -515,12 +516,12 @@ private fun GenderSelector(
 private fun GenderItem(
     text: String,
     selected: Boolean,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
 
     Box(
-        modifier = Modifier
-            .width(82.dp)
+        modifier = modifier
             .height(50.dp)
             .clickable {
                 onClick()
@@ -537,14 +538,13 @@ private fun GenderItem(
 
         Text(
             text = text,
-
             color = if (selected) {
                 Color(0xFF555555)
             } else {
                 Color(0xFFBBBBBB)
             },
-
-            fontSize = 15.sp
+            fontSize = 15.sp,
+            maxLines = 1
         )
     }
 }

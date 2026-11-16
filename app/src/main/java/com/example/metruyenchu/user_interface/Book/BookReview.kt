@@ -53,6 +53,10 @@ import com.example.metruyenchu.user_interface.Book.components.BookHeader
 import com.example.metruyenchu.user_interface.Book.components.ReportBottomSheet
 import com.example.metruyenchu.user_interface.home.BookReviewViewModel
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.runtime.rememberCoroutineScope
+import com.example.metruyenchu.api.RetrofitClient
+import kotlinx.coroutines.launch
 
 data class ReviewData(
     val reviewId: Long,
@@ -77,15 +81,51 @@ fun BookReview(
     onChapterListClick: () -> Unit = {},
     onReviewCommentClick: (Long) -> Unit = {},
     onWriteReviewClick: () -> Unit = {},
-    reviewViewModel: BookReviewViewModel = viewModel()
+    reviewViewModel: BookReviewViewModel = viewModel(),
+    onReadChapter: (Int) -> Unit = {},
 ) {
     val reviews by reviewViewModel.reviews.collectAsState()
     val likedReviews by reviewViewModel.likedReviews.collectAsState()
     val isLoading by reviewViewModel.isLoading.collectAsState()
     val error by reviewViewModel.error.collectAsState()
 
+    var currentUserId by remember { mutableStateOf<Long?>(null) }
+    var isBookmarked by remember { mutableStateOf(false) }
+    var isTogglingBookmark by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+
+    LaunchedEffect(book.bookId) {
+        try {
+            val userResponse = RetrofitClient.api.getCurrentUser()
+            if (userResponse.isSuccessful) {
+                currentUserId = userResponse.body()?.userId
+            }
+
+            // Kiểm tra truyện đã nằm trong danh sách Đánh dấu chưa
+            val followsResponse = RetrofitClient.api.getMyFollows()
+            if (followsResponse.isSuccessful) {
+                val followList = followsResponse.body().orEmpty()
+                isBookmarked = followList.any { it.bookId == book.bookId }
+            }
+        } catch (_: Exception) {}
+    }
+
     LaunchedEffect(book.bookId) {
         reviewViewModel.loadReviews(book.bookId)
+    }
+
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+
+    androidx.compose.runtime.DisposableEffect(lifecycleOwner, book.bookId) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                reviewViewModel.loadReviews(book.bookId)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
     }
 
     LaunchedEffect(reviews) {
@@ -100,12 +140,24 @@ fun BookReview(
         .firstOrNull()
         ?: "Chưa phân loại"
 
-    var isAddedToLibrary by remember { mutableStateOf(false) }
-
     var showReportSheet by remember { mutableStateOf(false) }
     var selectedReview by remember { mutableStateOf<ReviewData?>(null) }
 
-    val reviewItems = reviews.map { review ->
+    // 1. Lưu trạng thái bộ lọc đang chọn (Mặc định là "Mới")
+    var selectedSort by remember { mutableStateOf("Mới") }
+
+    // 2. Sắp xếp danh sách reviews gốc dựa theo tab đang chọn
+    val sortedReviews = remember(reviews, selectedSort) {
+        when (selectedSort) {
+            "Mới" -> reviews.sortedByDescending { it.createdAt } // Hoặc sortedByDescending { it.reviewId }
+            "Cũ" -> reviews.sortedBy { it.createdAt }            // Hoặc sortedBy { it.reviewId }
+            "Thích" -> reviews.sortedByDescending { it.likeCount }
+            else -> reviews
+        }
+    }
+
+    // 3. Map từ danh sách đã sắp xếp sang ReviewData
+    val reviewItems = sortedReviews.map { review ->
         ReviewData(
             reviewId = review.reviewId,
             userId = review.userId,
@@ -151,7 +203,25 @@ fun BookReview(
                         }
 
                         Button(
-                            onClick = onReadClick,
+                            onClick = {
+                                val uid = currentUserId
+                                if (uid != null) {
+                                    scope.launch {
+                                        try {
+                                            val chaptersRes = RetrofitClient.api.getChaptersByBookId(book.bookId)
+                                            val firstChapterId = chaptersRes.body()?.firstOrNull()?.chapterId ?: 1L
+
+                                            RetrofitClient.api.saveReadingHistory(
+                                                userId = uid,
+                                                bookId = book.bookId,
+                                                chapterId = firstChapterId,
+                                                progress = 0.0
+                                            )
+                                        } catch (_: Exception) {}
+                                    }
+                                }
+                                onReadClick()
+                            },
                             modifier = Modifier.height(36.dp),
                             contentPadding = PaddingValues(horizontal = 18.dp),
                             shape = RoundedCornerShape(18.dp),
@@ -170,22 +240,51 @@ fun BookReview(
                                 .size(36.dp)
                                 .clip(CircleShape)
                                 .background(Color(0xFF1976D2))
-                                .clickable {
-                                    isAddedToLibrary = !isAddedToLibrary
-                                    onAddToLibraryClick()
+                                .clickable(enabled = !isTogglingBookmark && currentUserId != null) {
+                                    val uid = currentUserId ?: return@clickable
+                                    scope.launch {
+                                        isTogglingBookmark = true
+                                        try {
+                                            val response = if (isBookmarked) {
+                                                RetrofitClient.api.unfollowBook(
+                                                    userId = uid,
+                                                    bookId = book.bookId
+                                                )
+                                            } else {
+                                                RetrofitClient.api.followBook(
+                                                    userId = uid,
+                                                    bookId = book.bookId
+                                                )
+                                            }
+
+                                            if (response.isSuccessful) {
+                                                isBookmarked = !isBookmarked
+                                                onAddToLibraryClick()
+                                            } else {
+                                                android.util.Log.e(
+                                                    "BookReview",
+                                                    "Lỗi API đánh dấu: HTTP ${response.code()} - ${response.errorBody()?.string()}"
+                                                )
+                                            }
+                                        } catch (e: Exception) {
+                                            android.util.Log.e("BookReview", "Exception đánh dấu", e)
+                                        } finally {
+                                            isTogglingBookmark = false
+                                        }
+                                    }
                                 },
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
-                                imageVector = if (isAddedToLibrary) {
+                                imageVector = if (isBookmarked) {
                                     Icons.Default.Remove
                                 } else {
                                     Icons.Default.Add
                                 },
-                                contentDescription = if (isAddedToLibrary) {
-                                    "Xóa khỏi tủ"
+                                contentDescription = if (isBookmarked) {
+                                    "Bỏ đánh dấu"
                                 } else {
-                                    "Thêm vào tủ"
+                                    "Đánh dấu"
                                 },
                                 tint = Color.White,
                                 modifier = Modifier.size(20.dp)
@@ -200,7 +299,8 @@ fun BookReview(
                     modifier = Modifier
                         .fillMaxSize()
                         .background(Color(0xFF303030))
-                        .padding(paddingValues),
+                        // Chỉ lấy bottom padding của Scaffold, bỏ top padding thừa ở trên cùng
+                        .padding(bottom = paddingValues.calculateBottomPadding()),
                     contentPadding = PaddingValues(bottom = 80.dp)
                 ) {
                     item {
@@ -208,6 +308,9 @@ fun BookReview(
                             book = book,
                             onBack = onBack,
                             onReadClick = onReadClick,
+                            onReadChapterClick = { chapterNumber ->
+                                onReadChapter(chapterNumber)
+                            },
                             onAddToLibraryClick = onAddToLibraryClick
                         )
                     }
@@ -221,7 +324,13 @@ fun BookReview(
                     }
 
                     item {
-                        ReviewHeader(reviewCount = reviewItems.size)
+                        ReviewHeader(
+                            reviewCount = reviewItems.size,
+                            selectedSort = selectedSort,
+                            onSortChange = { newSort ->
+                                selectedSort = newSort
+                            }
+                        )
                     }
 
                     if (isLoading) {
@@ -293,20 +402,29 @@ fun BookReview(
                         ) { review ->
                             ReviewItem(
                                 review = review,
-
                                 isLiked = likedReviews.contains(review.reviewId),
-
+                                isMyReview = currentUserId != null && review.userId == currentUserId,
                                 onLikeClick = {
                                     reviewViewModel.toggleLike(review.reviewId)
                                 },
-
                                 onCommentClick = {
                                     onReviewCommentClick(review.reviewId)
                                 },
-
                                 onReportClick = {
                                     selectedReview = review
                                     showReportSheet = true
+                                },
+                                onDeleteClick = {
+                                    scope.launch {
+                                        try {
+                                            val response = RetrofitClient.api.deleteReview(review.reviewId)
+                                            if (response.isSuccessful) {
+                                                reviewViewModel.loadReviews(book.bookId)
+                                            }
+                                        } catch (e: Exception) {
+                                            android.util.Log.e("BookReview", "Lỗi xóa đánh giá", e)
+                                        }
+                                    }
                                 }
                             )
                         }
@@ -362,36 +480,32 @@ fun BookReview(
 
 private fun formatReviewTime(createdAt: String): String {
     return try {
-        val dateTime = java.time.OffsetDateTime.parse(
-            createdAt.replace("Z", "+00:00")
-        )
-
-        val createdTime = dateTime.toInstant()
-        val now = java.time.Instant.now()
-
-        val seconds = java.time.Duration
-            .between(createdTime, now)
-            .seconds
-
-        when {
-            seconds < 3600 ->
-                "vừa xong"
-
-            seconds < 86400 ->
-                "${seconds / 3600} tiếng trước"
-
-            seconds < 2592000 ->
-                "${seconds / 86400} ngày trước"
-
-            seconds < 31536000 ->
-                "${seconds / 2592000} tháng trước"
-
-            else ->
-                "${seconds / 31536000} năm trước"
+        val cleanTime = createdAt.trim()
+        val createdInstant = if (cleanTime.endsWith("Z") || cleanTime.contains("+")) {
+            java.time.OffsetDateTime.parse(cleanTime.replace("Z", "+00:00")).toInstant()
+        } else {
+            java.time.LocalDateTime.parse(
+                cleanTime,
+                java.time.format.DateTimeFormatter.ISO_LOCAL_DATE_TIME
+            ).atZone(java.time.ZoneId.systemDefault()).toInstant()
         }
 
+        val now = java.time.Instant.now()
+        val seconds = java.time.Duration
+            .between(createdInstant, now)
+            .seconds
+            .coerceAtLeast(0)
+
+        when {
+            seconds < 60 -> "vừa xong"
+            seconds < 3600 -> "${seconds / 60} phút trước"
+            seconds < 86400 -> "${seconds / 3600} tiếng trước"
+            seconds < 2592000 -> "${seconds / 86400} ngày trước"
+            seconds < 31536000 -> "${seconds / 2592000} tháng trước"
+            else -> "${seconds / 31536000} năm trước"
+        }
     } catch (e: Exception) {
-        "vừa xong"
+        createdAt
     }
 }
 
@@ -463,10 +577,9 @@ fun ReviewTabBar(
 @Composable
 fun ReviewHeader(
     reviewCount: Int = 0,
+    selectedSort: String = "Mới",
     onSortChange: (String) -> Unit = {}
 ) {
-    var selectedSort by remember { mutableStateOf("Mới") }
-
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -498,108 +611,56 @@ fun ReviewHeader(
                 .clip(RoundedCornerShape(20.dp))
                 .background(Color(0xFF484848))
         ) {
+            // TAB MỚI
             Box(
                 modifier = Modifier
-                    .clip(
-                        RoundedCornerShape(
-                            topStart = 20.dp,
-                            bottomStart = 20.dp
-                        )
-                    )
-                    .clickable {
-                        selectedSort = "Mới"
-                        onSortChange("Mới")
-                    }
+                    .clip(RoundedCornerShape(topStart = 20.dp, bottomStart = 20.dp))
+                    .clickable { onSortChange("Mới") }
                     .background(
-                        if (selectedSort == "Mới") {
-                            Color(0xFFE0E0E0)
-                        } else {
-                            Color.Transparent
-                        }
+                        if (selectedSort == "Mới") Color(0xFFE0E0E0) else Color.Transparent
                     )
                     .padding(horizontal = 16.dp, vertical = 8.dp)
             ) {
                 Text(
                     text = "Mới",
-                    color = if (selectedSort == "Mới") {
-                        Color(0xFF333333)
-                    } else {
-                        Color(0xFFD0D0D0)
-                    },
+                    color = if (selectedSort == "Mới") Color(0xFF333333) else Color(0xFFD0D0D0),
                     fontSize = 13.sp,
-                    fontWeight = if (selectedSort == "Mới") {
-                        FontWeight.Bold
-                    } else {
-                        FontWeight.Normal
-                    }
+                    fontWeight = if (selectedSort == "Mới") FontWeight.Bold else FontWeight.Normal
                 )
             }
 
+            // TAB CŨ
             Box(
                 modifier = Modifier
-                    .clickable {
-                        selectedSort = "Cũ"
-                        onSortChange("Cũ")
-                    }
+                    .clickable { onSortChange("Cũ") }
                     .background(
-                        if (selectedSort == "Cũ") {
-                            Color(0xFFE0E0E0)
-                        } else {
-                            Color.Transparent
-                        }
+                        if (selectedSort == "Cũ") Color(0xFFE0E0E0) else Color.Transparent
                     )
                     .padding(horizontal = 14.dp, vertical = 8.dp)
             ) {
                 Text(
                     text = "Cũ",
-                    color = if (selectedSort == "Cũ") {
-                        Color(0xFF333333)
-                    } else {
-                        Color(0xFFD0D0D0)
-                    },
+                    color = if (selectedSort == "Cũ") Color(0xFF333333) else Color(0xFFD0D0D0),
                     fontSize = 13.sp,
-                    fontWeight = if (selectedSort == "Cũ") {
-                        FontWeight.Bold
-                    } else {
-                        FontWeight.Normal
-                    }
+                    fontWeight = if (selectedSort == "Cũ") FontWeight.Bold else FontWeight.Normal
                 )
             }
 
+            // TAB THÍCH
             Box(
                 modifier = Modifier
-                    .clip(
-                        RoundedCornerShape(
-                            topEnd = 20.dp,
-                            bottomEnd = 20.dp
-                        )
-                    )
-                    .clickable {
-                        selectedSort = "Thích"
-                        onSortChange("Thích")
-                    }
+                    .clip(RoundedCornerShape(topEnd = 20.dp, bottomEnd = 20.dp))
+                    .clickable { onSortChange("Thích") }
                     .background(
-                        if (selectedSort == "Thích") {
-                            Color(0xFFE0E0E0)
-                        } else {
-                            Color.Transparent
-                        }
+                        if (selectedSort == "Thích") Color(0xFFE0E0E0) else Color.Transparent
                     )
                     .padding(horizontal = 14.dp, vertical = 8.dp)
             ) {
                 Text(
                     text = "Thích",
-                    color = if (selectedSort == "Thích") {
-                        Color(0xFF333333)
-                    } else {
-                        Color(0xFFD0D0D0)
-                    },
+                    color = if (selectedSort == "Thích") Color(0xFF333333) else Color(0xFFD0D0D0),
                     fontSize = 13.sp,
-                    fontWeight = if (selectedSort == "Thích") {
-                        FontWeight.Bold
-                    } else {
-                        FontWeight.Normal
-                    }
+                    fontWeight = if (selectedSort == "Thích") FontWeight.Bold else FontWeight.Normal
                 )
             }
         }
@@ -610,9 +671,11 @@ fun ReviewHeader(
 fun ReviewItem(
     review: ReviewData,
     isLiked: Boolean = false,
+    isMyReview: Boolean = false,
     onLikeClick: () -> Unit = {},
     onCommentClick: () -> Unit = {},
-    onReportClick: () -> Unit = {}
+    onReportClick: () -> Unit = {},
+    onDeleteClick: () -> Unit = {}
 ) {
     Column(
         modifier = Modifier
@@ -673,33 +736,55 @@ fun ReviewItem(
                 }
             }
 
-            Box(
-                modifier = Modifier
-                    .size(36.dp)
-                    .clip(CircleShape)
-                    .clickable { onReportClick() },
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Flag,
-                    contentDescription = "Báo cáo",
-                    tint = Color(0xFF888888),
-                    modifier = Modifier.size(20.dp)
-                )
+            // GÓC TRÊN BÊN PHẢI: Nút Xóa (bên trái) + Nút Lá cờ Báo cáo (bên phải)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (isMyReview) {
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .clickable { onDeleteClick() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Delete,
+                            contentDescription = "Xóa đánh giá",
+                            tint = Color(0xFFE53935),
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .clickable { onReportClick() },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Flag,
+                        contentDescription = "Báo cáo",
+                        tint = Color(0xFF888888),
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
             }
         }
 
-        Text(
-            text = review.comment,
-            color = Color(0xFFE0E0E0),
-            fontSize = 15.sp,
-            lineHeight = 23.sp,
-            modifier = Modifier.padding(
-                start = 66.dp,
-                top = 10.dp,
-                end = 10.dp
+        if (review.comment.isNotBlank()) {
+            Text(
+                text = review.comment,
+                color = Color(0xFFE0E0E0),
+                fontSize = 15.sp,
+                lineHeight = 23.sp,
+                modifier = Modifier.padding(
+                    start = 66.dp,
+                    top = 10.dp,
+                    end = 10.dp
+                )
             )
-        )
+        }
 
         Row(
             modifier = Modifier
@@ -715,23 +800,13 @@ fun ReviewItem(
             )
 
             Row(
-                modifier = Modifier.clickable {
-                    onLikeClick()
-                },
+                modifier = Modifier.clickable { onLikeClick() },
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(
                     imageVector = Icons.Default.ThumbUp,
-                    contentDescription = if (isLiked) {
-                        "Bỏ thích"
-                    } else {
-                        "Thích"
-                    },
-                    tint = if (isLiked) {
-                        Color(0xFF2196F3)
-                    } else {
-                        Color(0xFF888888)
-                    },
+                    contentDescription = if (isLiked) "Bỏ thích" else "Thích",
+                    tint = if (isLiked) Color(0xFF2196F3) else Color(0xFF888888),
                     modifier = Modifier.size(18.dp)
                 )
 
@@ -739,11 +814,7 @@ fun ReviewItem(
 
                 Text(
                     text = review.likes.toString(),
-                    color = if (isLiked) {
-                        Color(0xFF2196F3)
-                    } else {
-                        Color(0xFF888888)
-                    },
+                    color = if (isLiked) Color(0xFF2196F3) else Color(0xFF888888),
                     fontSize = 12.sp
                 )
             }
@@ -781,3 +852,5 @@ fun ReviewItem(
         )
     }
 }
+
+

@@ -14,6 +14,11 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.exclude
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -179,6 +184,10 @@ fun AISearchScreen(
     // MAIN UI
     // ==================================================
 
+    // ==================================================
+    // MAIN UI
+    // ==================================================
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -313,13 +322,24 @@ fun AISearchScreen(
 
                 item {
 
+                    // ==================================================
+                    // INPUT AREA
+                    // ==================================================
+
+                    // ==================================================
+                    // INPUT AREA
+                    // ==================================================
+
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(vertical = 10.dp),
-
-                        verticalAlignment =
-                            Alignment.CenterVertically
+                            .padding(
+                                start = 14.dp,
+                                end = 14.dp,
+                                bottom = 10.dp,
+                                top = 6.dp
+                            ),
+                        verticalAlignment = Alignment.Bottom
                     ) {
 
                         CircularProgressIndicator(
@@ -503,23 +523,22 @@ fun AISearchScreen(
         // INPUT AREA
         // ==================================================
 
+        // ==================================================
+        // INPUT AREA
+        // ==================================================
+
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-
-                // Quan trọng:
-                // Đẩy ô nhập lên ngay phía trên bàn phím
-                .imePadding()
-
-                .navigationBarsPadding()
-
+                .windowInsetsPadding(
+                    WindowInsets.ime.exclude(WindowInsets.navigationBars)
+                )
                 .padding(
                     start = 14.dp,
                     end = 14.dp,
                     bottom = 12.dp,
                     top = 6.dp
                 ),
-
             verticalAlignment = Alignment.Bottom
         ) {
 

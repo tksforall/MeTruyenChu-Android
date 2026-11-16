@@ -17,3 +17,12 @@ data class UserResponse(
     val phone: String?,
     val gender: String?
 )
+
+data class ForgotPasswordResponse(
+    val message: String,
+    val otp: String
+)
+
+data class ResetPasswordResponse(
+    val message: String
+)

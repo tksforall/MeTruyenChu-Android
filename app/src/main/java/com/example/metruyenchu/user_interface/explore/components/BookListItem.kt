@@ -1,18 +1,17 @@
 package com.example.metruyenchu.user_interface.explore.components
 
-import android.util.Log
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -22,14 +21,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.withStyle
 
 data class BookListItemData(
     val bookId: Long = 0L,
@@ -52,7 +51,10 @@ data class BookListItemData(
 
     val bookmarks: String = "0",
 
+    val chapterCount: Int = 0,
+
     val description: String = "",
+
     // =========================
     // DỮ LIỆU RANKING
     // =========================
@@ -129,8 +131,6 @@ fun BookListItem(
     highlightKeyword: String = "",
     onClick: () -> Unit = {}
 ) {
-
-    println("BOOK IMAGE URL = ${book.imageUrl}")
 
     Row(
         modifier = modifier
@@ -219,7 +219,7 @@ fun BookListItem(
             )
 
             // =========================
-            // ĐÁNH GIÁ + LƯỢT ĐÁNH DẤU
+            // ĐÁNH GIÁ + SỐ CHƯƠNG
             // =========================
 
             Row(
@@ -230,7 +230,7 @@ fun BookListItem(
                     imageVector = Icons.Default.Star,
                     contentDescription = "Đánh giá",
                     tint = Color(0xFFAAAAAA),
-                    modifier = Modifier.height(22.dp)
+                    modifier = Modifier.size(18.dp)
                 )
 
                 Spacer(
@@ -248,18 +248,18 @@ fun BookListItem(
                 )
 
                 Icon(
-                    imageVector = Icons.Default.Bookmark,
-                    contentDescription = "Lượt đánh dấu",
+                    imageVector = Icons.AutoMirrored.Filled.MenuBook,
+                    contentDescription = "Số chương",
                     tint = Color(0xFFAAAAAA),
-                    modifier = Modifier.height(20.dp)
+                    modifier = Modifier.size(17.dp)
                 )
 
                 Spacer(
-                    modifier = Modifier.width(3.dp)
+                    modifier = Modifier.width(4.dp)
                 )
 
                 Text(
-                    text = book.bookmarks,
+                    text = "${book.chapterCount} chương",
                     color = Color(0xFFAAAAAA),
                     fontSize = 13.sp
                 )

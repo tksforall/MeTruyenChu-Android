@@ -1,6 +1,7 @@
 package com.example.metruyenchu.navigation
 
 import android.util.Log
+import android.widget.Toast
 import androidx.compose.foundation.layout.Box
 
 import androidx.compose.foundation.layout.fillMaxSize
@@ -67,6 +68,7 @@ import com.example.metruyenchu.user_interface.search.AISearchScreen
 
 import com.example.metruyenchu.user_interface.reader.ReaderScreen
 import com.example.metruyenchu.user_interface.reader.ChapterListScreen
+import com.example.metruyenchu.api.RegisterRequest
 
 import com.example.metruyenchu.user_interface.Book.BookOverview
 import com.example.metruyenchu.user_interface.Book.BookReview
@@ -548,10 +550,13 @@ fun AppNavigation(
             composable("notification") {
 
                 NotificationScreen(
-
                     onBack = {
-
                         navController.popBackStack()
+                    },
+                    onNavigateToBook = { bookId ->
+                        navController.navigate(
+                            "book_overview/$bookId/notification"
+                        )
                     }
                 )
             }
@@ -922,400 +927,143 @@ fun AppNavigation(
             // ==================================================
             // BOOK OVERVIEW
             // ==================================================
-
             composable(
-
                 route = "book_overview/{bookId}/{returnRoute}",
-
                 arguments = listOf(
-
-                    navArgument("bookId") {
-                        type = NavType.LongType
-                    },
-
-                    navArgument("returnRoute") {
-                        type = NavType.StringType
-                    }
+                    navArgument("bookId") { type = NavType.LongType },
+                    navArgument("returnRoute") { type = NavType.StringType }
                 )
-
             ) { backStackEntry ->
+                val bookId = backStackEntry.arguments?.getLong("bookId") ?: return@composable
+                val returnRoute = backStackEntry.arguments?.getString("returnRoute") ?: "home"
 
-                val bookId =
-                    backStackEntry.arguments
-                        ?.getLong("bookId")
-                        ?: return@composable
-
-
-                val returnRoute =
-                    backStackEntry.arguments
-                        ?.getString("returnRoute")
-                        ?: "home"
-
-
-                val bookOverviewViewModel: BookOverviewViewModel =
-                    viewModel()
-
-
-                val book by bookOverviewViewModel.book
-                    .collectAsState()
-
-
-                val isLoading by bookOverviewViewModel.isLoading
-                    .collectAsState()
-
-
-                val error by bookOverviewViewModel.error
-                    .collectAsState()
-
-                val currentUserId =
-                    SessionManager(context).getUserId()
+                val bookOverviewViewModel: BookOverviewViewModel = viewModel()
+                val book by bookOverviewViewModel.book.collectAsState()
+                val isLoading by bookOverviewViewModel.isLoading.collectAsState()
+                val error by bookOverviewViewModel.error.collectAsState()
 
                 LaunchedEffect(bookId) {
                     bookOverviewViewModel.loadBook(bookId)
                     bookOverviewViewModel.loadLibraryState(bookId)
                 }
 
-
                 when {
-
                     isLoading -> {
-
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
-
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             CircularProgressIndicator()
                         }
                     }
-
-
                     error != null -> {
-
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
-
-                            Text(
-                                text = error ?: "Có lỗi xảy ra",
-                                color = Color.White
-                            )
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Text(text = error ?: "Có lỗi xảy ra", color = Color.White)
                         }
                     }
-
-
                     book != null -> {
-
                         BookOverview(
-
                             book = book!!,
-
                             isInLibrary = bookOverviewViewModel.isInLibrary.collectAsState().value,
-
-                            onBack = {
-
-                                navController.popBackStack()
+                            onBack = { navController.popBackStack() },
+                            onReadClick = { navController.navigate("reader/$bookId/1") },
+                            onReadChapter = { chapterNumber ->
+                                navController.navigate("reader/$bookId/$chapterNumber")
                             },
-
-
-                            // ==========================================
-                            // ĐỌC
-                            // ==========================================
-
-                            onReadClick = {
-
-                                navController.navigate("reader/$bookId/1")
-                            },
-
-
-                            // ==========================================
-                            // THÊM VÀO TỦ
-                            // ==========================================
-
                             onAddToLibraryClick = {
-                                bookOverviewViewModel.toggleLibrary(
-                                    currentUserId,
-                                    bookId
-                                )
+                                bookOverviewViewModel.loadLibraryState(bookId)
                             },
-
-
-                            // ==========================================
-                            // REVIEW
-                            // ==========================================
-
                             onReviewClick = {
-
-                                navController.navigate(
-                                    "book_review/$bookId/$returnRoute"
-                                )
+                                navController.navigate("book_review/$bookId/$returnRoute") {
+                                    popUpTo("book_overview/$bookId/$returnRoute") { inclusive = true }
+                                }
                             },
-
-
-                            // ==========================================
-                            // COMMENT
-                            // ==========================================
-
                             onCommentClick = {
-
-                                navController.navigate(
-                                    "book_comment/$bookId/$returnRoute"
-                                )
+                                navController.navigate("book_comment/$bookId/$returnRoute")
                             },
-
-
-                            // ==========================================
-                            // CHAPTER LIST
-                            // ==========================================
-
                             onChapterListClick = {
-
-                                navController.navigate(
-                                    "chapter_list/$bookId/1"
-                                )
+                                navController.navigate("chapter_list/$bookId/1")
                             },
-
-
-                            // ==========================================
-                            // GENRE
-                            // ==========================================
-
-                            onGenreClick = { _ ->
-                                navController.navigate("list_of_story")
-                            },
-
-
-                            // ==========================================
-                            // TAG
-                            // ==========================================
-
-                            onTagClick = { _ ->
-                                navController.navigate("list_of_story")
-                            }
-
+                            onGenreClick = { _ -> navController.navigate("list_of_story") },
+                            onTagClick = { _ -> navController.navigate("list_of_story") }
                         )
                     }
                 }
             }
-
 
             // ==================================================
             // BOOK COMMENT
             // ==================================================
-
-
             composable(
-
                 route = "book_comment/{bookId}/{returnRoute}",
-
                 arguments = listOf(
-
-                    navArgument("bookId") {
-                        type = NavType.LongType
-                    },
-
-                    navArgument("returnRoute") {
-                        type = NavType.StringType
-                    }
+                    navArgument("bookId") { type = NavType.LongType },
+                    navArgument("returnRoute") { type = NavType.StringType }
                 )
-
             ) { backStackEntry ->
-
-                val bookId =
-                    backStackEntry.arguments
-                        ?.getLong("bookId")
-                        ?: return@composable
-
-
-                val returnRoute =
-                    backStackEntry.arguments
-                        ?.getString("returnRoute")
-                        ?: "home"
-
+                val bookId = backStackEntry.arguments?.getLong("bookId") ?: return@composable
+                val returnRoute = backStackEntry.arguments?.getString("returnRoute") ?: "home"
 
                 BookComment(
-
                     bookId = bookId,
-
-                    onBack = {
-
-                        navController.popBackStack()
-                    },
-
+                    onBack = { navController.popBackStack() },
                     onCommentDetailClick = { commentId ->
-
-                        navController.navigate(
-                            "comment_detail/$commentId"
-                        )
+                        navController.navigate("comment_detail/$commentId")
                     }
                 )
             }
 
-
             // ==================================================
             // BOOK REVIEW
             // ==================================================
-
             composable(
                 route = "book_review/{bookId}/{returnRoute}",
                 arguments = listOf(
-                    navArgument("bookId") {
-                        type = NavType.LongType
-                    },
-                    navArgument("returnRoute") {
-                        type = NavType.StringType
-                    }
+                    navArgument("bookId") { type = NavType.LongType },
+                    navArgument("returnRoute") { type = NavType.StringType }
                 )
             ) { entry ->
+                val bookId = entry.arguments?.getLong("bookId") ?: return@composable
+                val returnRoute = entry.arguments?.getString("returnRoute") ?: "home"
 
-                val bookId =
-                    entry.arguments?.getLong("bookId")
-                        ?: return@composable
-
-                val returnRoute =
-                    entry.arguments?.getString("returnRoute")
-                        ?: "home"
-
-                val vm: BookOverviewViewModel =
-                    viewModel()
-
+                val vm: BookOverviewViewModel = viewModel()
                 val book by vm.book.collectAsState()
 
-                val currentUserId =
-                    SessionManager(context).getUserId()
-
-
-                // ======================================================
-                // LOAD BOOK
-                // ======================================================
-
                 LaunchedEffect(bookId) {
-
                     vm.loadBook(bookId)
-
                     vm.loadLibraryState(bookId)
                 }
 
-
-                // ======================================================
-                // UI
-                // ======================================================
-
                 when {
-
-                    vm.isLoading.collectAsState().value &&
-                            book == null -> {
-
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
-
+                    vm.isLoading.collectAsState().value && book == null -> {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             CircularProgressIndicator()
                         }
                     }
-
-
                     book != null -> {
-
                         BookReview(
-
                             book = book!!,
-
-
-                            // ==================================================
-                            // BACK
-                            // ==================================================
-
-                            onBack = {
-
-                                navController.popBackStack()
+                            onBack = { navController.popBackStack() },
+                            onReadClick = { navController.navigate("reader/$bookId/1") },
+                            onReadChapter = { chapterNumber ->
+                                navController.navigate("reader/$bookId/$chapterNumber")
                             },
-
-
-                            // ==================================================
-                            // READ
-                            // ==================================================
-
-                            onReadClick = {
-
-                                navController.navigate(
-                                    "reader/$bookId/1"
-                                )
-                            },
-
-
-                            // ==================================================
-                            // LIBRARY
-                            // ==================================================
-
                             onAddToLibraryClick = {
-
-                                vm.toggleLibrary(
-                                    currentUserId,
-                                    bookId
-                                )
+                                vm.loadLibraryState(bookId)
                             },
-
-
-                            // ==================================================
-                            // OVERVIEW
-                            // ==================================================
-
                             onOverviewClick = {
-
-                                navController.navigate(
-                                    "book_overview/$bookId/$returnRoute"
-                                )
+                                navController.navigate("book_overview/$bookId/$returnRoute") {
+                                    popUpTo("book_review/$bookId/$returnRoute") { inclusive = true }
+                                }
                             },
-
-
-                            // ==================================================
-                            // COMMENT
-                            // ==================================================
-
                             onCommentClick = {
-
-                                navController.navigate(
-                                    "book_comment/$bookId/$returnRoute"
-                                )
+                                navController.navigate("book_comment/$bookId/$returnRoute")
                             },
-
-
-                            // ==================================================
-                            // CHAPTER LIST
-                            // ==================================================
-
                             onChapterListClick = {
-
-                                navController.navigate(
-                                    "chapter_list/$bookId/1"
-                                )
+                                navController.navigate("chapter_list/$bookId/1")
                             },
-
-
-                            // ==================================================
-                            // REVIEW COMMENT
-                            // ==================================================
-
                             onReviewCommentClick = { reviewId ->
-
-                                navController.navigate(
-                                    "review_comment/$bookId/$reviewId/$returnRoute"
-                                )
+                                navController.navigate("review_comment/$bookId/$reviewId/$returnRoute")
                             },
-
-
-                            // ==================================================
-                            // WRITE REVIEW
-                            // ==================================================
-
                             onWriteReviewClick = {
-
-                                navController.navigate(
-                                    "write_review/$bookId/$returnRoute"
-                                )
+                                navController.navigate("write_review/$bookId/$returnRoute")
                             }
                         )
                     }
@@ -1381,49 +1129,31 @@ fun AppNavigation(
                 reviewViewModel.createReviewError.collectAsState()
 
                 WriteReview(
-
                     bookId = bookId,
+                    isSubmitting = isCreatingReview,
 
                     onBack = {
-
-                        navController.popBackStack()
-                    },
-
-                    onSubmit = {
-                            rating,
-                            character,
-                            plot,
-                            world,
-                            content ->
-
-                        reviewViewModel.createReview(
-
-                            bookId = bookId,
-
-                            rating = rating.toDouble(),
-
-                            content = content
-
-                        ) { createdReview ->
-
-                            // ------------------------------------------
-                            // Báo cho BookReview biết đã tạo review
-                            // ------------------------------------------
-
-                            navController
-                                .previousBackStackEntry
-                                ?.savedStateHandle
-                                ?.set(
-                                    "review_created",
-                                    true
-                                )
-
-                            // ------------------------------------------
-                            // Quay lại BookReview
-                            // ------------------------------------------
-
+                        if (!isCreatingReview) {
                             navController.popBackStack()
                         }
+                    },
+
+                    onSubmit = { rating, character, plot, world, content ->
+                        android.util.Log.d("WRITE_REVIEW_DEBUG", "1. Bấm nút Đăng: rating=$rating, content='$content'")
+
+                        reviewViewModel.createReview(
+                            bookId = bookId,
+                            rating = rating.toDouble(),
+                            content = content,
+                            onSuccess = { createdReview ->
+                                android.util.Log.d("WRITE_REVIEW_DEBUG", "2. Thành công! Chuẩn bị popBackStack")
+                                val popped = navController.popBackStack()
+                                android.util.Log.d("WRITE_REVIEW_DEBUG", "3. Kết quả popBackStack = $popped")
+                            },
+                            onError = { errorMsg ->
+                                android.util.Log.e("WRITE_REVIEW_DEBUG", "2. LỖI API: $errorMsg")
+                            }
+                        )
                     }
                 )
             }
@@ -1495,14 +1225,19 @@ fun AppNavigation(
                     error != null && chapter == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text(error ?: "Lỗi", color = Color.White) }
                     chapter != null -> ReaderScreen(
                         chapter = chapter!!,
+                        totalChapters = chapters.maxOfOrNull { it.chapterNumber } ?: chapter!!.chapterNumber,
                         onBack = { navController.popBackStack() },
                         onChapterListClick = { navController.navigate("chapter_list/$bookId/$chapterNumber") },
                         onNightModeClick = { navController.navigate("night_mode") },
                         onBookmarkClick = { },
                         onCommentClick = { navController.navigate("book_comment/$bookId/home") },
                         onBookOverviewClick = { navController.navigate("book_overview/$bookId/reader") },
+                        onReloadClick = {
+                            readerViewModel.load(bookId, chapter!!.chapterNumber, userId)
+                        },
                         onPreviousChapter = {
-                            chapters.firstOrNull { it.chapterNumber == chapter!!.chapterNumber - 1 }?.let { readerViewModel.selectChapter(bookId, it.chapterNumber, userId) }
+                            chapters.firstOrNull { it.chapterNumber == chapter!!.chapterNumber - 1 }
+                                ?.let { readerViewModel.selectChapter(bookId, it.chapterNumber, userId) }
                         },
                         onNextChapter = {
                             chapters.firstOrNull { it.chapterNumber == chapter!!.chapterNumber + 1 }?.let { readerViewModel.selectChapter(bookId, it.chapterNumber, userId) }
@@ -1556,8 +1291,11 @@ fun AppNavigation(
                         isInLibrary = vm.isInLibrary.collectAsState().value,
                         onBack = { navController.popBackStack() },
                         onReadClick = { navController.navigate("reader/$bookId/1") },
+                        onReadChapter = { chapterNumber ->
+                            navController.navigate("reader/$bookId/$chapterNumber")
+                        },
                         onAddToLibraryClick = {
-                            vm.toggleLibrary(currentUserId, bookId)
+                            vm.loadLibraryState(bookId)
                         },
                         onReviewClick = { navController.navigate("book_review/$bookId/reader") },
                         onCommentClick = { navController.navigate("book_comment/$bookId/reader") },
@@ -1755,13 +1493,6 @@ fun AppNavigation(
                         )
                     },
 
-                    onGoogleLoginClick = {
-
-                        Log.d(
-                            "LOGIN",
-                            "Google Login chưa được kết nối"
-                        )
-                    }
                 )
             }
 
@@ -1771,12 +1502,47 @@ fun AppNavigation(
             // ==================================================
 
             composable("register") {
+                val context = LocalContext.current
+                val scope = rememberCoroutineScope()
 
                 RegisterScreen(
-
                     onBack = {
-
                         navController.popBackStack()
+                    },
+                    onRegisterClick = { email, password ->
+                        scope.launch {
+                            try {
+                                val defaultUserName = email.substringBefore("@").ifBlank { "user" }
+                                val response = RetrofitClient.api.register(
+                                    RegisterRequest(
+                                        userName = defaultUserName,
+                                        email = email,
+                                        password = password
+                                    )
+                                )
+
+                                if (response.isSuccessful) {
+                                    Toast.makeText(
+                                        context,
+                                        "Đăng ký thành công! Vui lòng đăng nhập.",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                    navController.popBackStack()
+                                } else {
+                                    Toast.makeText(
+                                        context,
+                                        "Đăng ký thất bại: Email đã tồn tại hoặc không hợp lệ (${response.code()})",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+                            } catch (e: Exception) {
+                                Toast.makeText(
+                                    context,
+                                    "Lỗi kết nối server: ${e.message}",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        }
                     }
                 )
             }
@@ -1787,19 +1553,41 @@ fun AppNavigation(
             // ==================================================
 
             composable("forgot_password") {
+                val context = LocalContext.current
+                val scope = rememberCoroutineScope()
 
                 ForgotPasswordScreen(
-
                     onBack = {
-
                         navController.popBackStack()
                     },
-
                     onSendCodeClick = { email ->
-
-                        navController.navigate(
-                            "reset_password/$email"
-                        )
+                        scope.launch {
+                            try {
+                                val response = RetrofitClient.api.forgotPassword(email)
+                                if (response.isSuccessful) {
+                                    val otp = response.body()?.otp ?: ""
+                                    Toast.makeText(
+                                        context,
+                                        "Mã xác nhận của bạn là: $otp",
+                                        Toast.LENGTH_LONG
+                                    ).show()
+                                    navController.navigate("reset_password/$email/$otp")
+                                } else {
+                                    val errorMsg = when (response.code()) {
+                                        404 -> "Email không tồn tại trong hệ thống"
+                                        403 -> "Tài khoản đã bị khóa"
+                                        else -> "Không thể gửi mã xác nhận (${response.code()})"
+                                    }
+                                    Toast.makeText(context, errorMsg, Toast.LENGTH_SHORT).show()
+                                }
+                            } catch (e: Exception) {
+                                Toast.makeText(
+                                    context,
+                                    "Lỗi kết nối server: ${e.message}",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        }
                     }
                 )
             }
@@ -1810,30 +1598,53 @@ fun AppNavigation(
             // ==================================================
 
             composable(
-                route = "reset_password/{email}"
+                route = "reset_password/{email}/{otp}"
             ) { backStackEntry ->
+                val context = LocalContext.current
+                val scope = rememberCoroutineScope()
 
-                val email =
-                    backStackEntry.arguments
-                        ?.getString("email")
-                        ?: ""
-
+                val email = backStackEntry.arguments?.getString("email") ?: ""
+                val demoOtp = backStackEntry.arguments?.getString("otp") ?: ""
 
                 ResetPasswordScreen(
-
                     email = email,
-
+                    demoOtp = demoOtp,
                     onBack = {
-
                         navController.popBackStack()
                     },
-
-                    onResetSuccess = {
-
-                        navController.popBackStack(
-                            "login",
-                            inclusive = false
-                        )
+                    onConfirm = { code, newPassword ->
+                        scope.launch {
+                            try {
+                                val response = RetrofitClient.api.resetPassword(
+                                    email = email,
+                                    otp = code,
+                                    newPassword = newPassword
+                                )
+                                if (response.isSuccessful) {
+                                    Toast.makeText(
+                                        context,
+                                        "Đổi mật khẩu thành công! Vui lòng đăng nhập lại.",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                    navController.popBackStack(
+                                        "login",
+                                        inclusive = false
+                                    )
+                                } else {
+                                    Toast.makeText(
+                                        context,
+                                        "Mã xác nhận không chính xác hoặc đã hết hạn",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+                            } catch (e: Exception) {
+                                Toast.makeText(
+                                    context,
+                                    "Lỗi kết nối server: ${e.message}",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        }
                     }
                 )
             }

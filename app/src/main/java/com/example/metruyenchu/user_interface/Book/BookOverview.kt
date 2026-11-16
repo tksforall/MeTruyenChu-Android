@@ -21,7 +21,14 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Remove
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import com.example.metruyenchu.api.RetrofitClient
+import kotlinx.coroutines.launch
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -39,6 +46,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.metruyenchu.api.BookResponse
 import com.example.metruyenchu.user_interface.Book.components.BookHeader
+
 
 
 // ==========================================================
@@ -87,6 +95,8 @@ fun BookOverview(
 
     onTagClick: (String) -> Unit = {},
 
+    onReadChapter: (Int) -> Unit = {}
+
 ) {
 
     // ======================================================
@@ -132,14 +142,28 @@ fun BookOverview(
 
     // ======================================================
     // TRẠNG THÁI TỦ TRUYỆN
-    //
-    // Tạm giữ local state.
-    // Khi có API bookmark/library thì nối callback này
-    // với backend.
     // ======================================================
 
-    val isAddedToLibrary = isInLibrary
+    var currentUserId by remember { mutableStateOf<Long?>(null) }
+    var isBookmarked by remember { mutableStateOf(isInLibrary) }
+    var isTogglingBookmark by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
 
+    LaunchedEffect(book.bookId) {
+        try {
+            val userResponse = RetrofitClient.api.getCurrentUser()
+            if (userResponse.isSuccessful) {
+                currentUserId = userResponse.body()?.userId
+            }
+
+            // Kiểm tra truyện đã nằm trong danh sách Đánh dấu chưa
+            val followsResponse = RetrofitClient.api.getMyFollows()
+            if (followsResponse.isSuccessful) {
+                val followList = followsResponse.body().orEmpty()
+                isBookmarked = followList.any { it.bookId == book.bookId }
+            }
+        } catch (_: Exception) {}
+    }
 
     // ======================================================
     // SCAFFOLD
@@ -221,87 +245,91 @@ fun BookOverview(
                     }
 
 
+
                     // ==========================================
-                    // NÚT ĐỌC
+                    // NÚT ĐỌC -> LƯU LỊCH SỬ ĐỌC TRUYỆN
                     // ==========================================
 
                     Button(
-                        onClick =
-                            onReadClick,
+                        onClick = {
+                            val uid = currentUserId
+                            if (uid != null) {
+                                scope.launch {
+                                    try {
+                                        val chaptersRes = RetrofitClient.api.getChaptersByBookId(book.bookId)
+                                        val firstChapterId = chaptersRes.body()?.firstOrNull()?.chapterId ?: 1L
 
-                        modifier =
-                            Modifier.height(36.dp),
-
-                        contentPadding =
-                            PaddingValues(
-                                horizontal = 18.dp
-                            ),
-
-                        shape =
-                            RoundedCornerShape(18.dp),
-
-                        colors =
-                            ButtonDefaults.buttonColors(
-                                containerColor =
-                                    Color.Black,
-
-                                contentColor =
-                                    Color.White
-                            )
+                                        RetrofitClient.api.saveReadingHistory(
+                                            userId = uid,
+                                            bookId = book.bookId,
+                                            chapterId = firstChapterId,
+                                            progress = 0.0
+                                        )
+                                    } catch (_: Exception) {}
+                                }
+                            }
+                            onReadClick()
+                        },
+                        modifier = Modifier.height(36.dp),
+                        contentPadding = PaddingValues(horizontal = 18.dp),
+                        shape = RoundedCornerShape(18.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color.Black,
+                            contentColor = Color.White
+                        )
                     ) {
-
                         Text(
-                            text =
-                                "Đọc",
-
-                            fontSize =
-                                12.sp
+                            text = "Đọc",
+                            fontSize = 12.sp
                         )
                     }
 
-
-                    Spacer(
-                        modifier =
-                            Modifier.width(8.dp)
-                    )
-
+                    Spacer(modifier = Modifier.width(8.dp))
 
                     // ==========================================
-                    // NÚT THÊM / BỎ KHỎI TỦ
+                    // NÚT "+" / "-" -> THÊM / XÓA MỤC ĐÁNH DẤU
                     // ==========================================
 
                     Box(
                         modifier = Modifier
                             .size(36.dp)
                             .clip(CircleShape)
-                            .background(
-                                Color(0xFF1976D2)
-                            )
-                            .clickable {
+                            .background(Color(0xFF1976D2))
+                            .clickable(enabled = !isTogglingBookmark && currentUserId != null) {
+                                val uid = currentUserId ?: return@clickable
+                                scope.launch {
+                                    isTogglingBookmark = true
+                                    try {
+                                        val response = if (isBookmarked) {
+                                            RetrofitClient.api.unfollowBook(
+                                                userId = uid,
+                                                bookId = book.bookId
+                                            )
+                                        } else {
+                                            RetrofitClient.api.followBook(
+                                                userId = uid,
+                                                bookId = book.bookId
+                                            )
+                                        }
 
-                                onAddToLibraryClick()
+                                        if (response.isSuccessful) {
+                                            isBookmarked = !isBookmarked
+                                            onAddToLibraryClick()
+                                        }
+                                    } catch (e: Exception) {
+                                        android.util.Log.e("BookOverview", "Lỗi cập nhật đánh dấu", e)
+                                    } finally {
+                                        isTogglingBookmark = false
+                                    }
+                                }
                             },
-
-                        contentAlignment =
-                            Alignment.Center
+                        contentAlignment = Alignment.Center
                     ) {
-
                         Icon(
-                            imageVector =
-                                if (isAddedToLibrary) Icons.Default.Check else Icons.Default.Add,
-
-                            contentDescription =
-                                if (isAddedToLibrary) {
-                                    "Bỏ khỏi tủ"
-                                } else {
-                                    "Thêm vào tủ"
-                                },
-
-                            tint =
-                                Color.White,
-
-                            modifier =
-                                Modifier.size(20.dp)
+                            imageVector = if (isBookmarked) Icons.Default.Remove else Icons.Default.Add,
+                            contentDescription = if (isBookmarked) "Bỏ đánh dấu" else "Đánh dấu",
+                            tint = Color.White,
+                            modifier = Modifier.size(20.dp)
                         )
                     }
                 }
@@ -318,12 +346,9 @@ fun BookOverview(
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .background(
-                    Color(0xFF303030)
-                )
-                .padding(
-                    paddingValues
-                ),
+                .background(Color(0xFF303030))
+                // Chỉ lấy bottom padding của Scaffold, bỏ khoảng thừa ở trên cùng
+                .padding(bottom = paddingValues.calculateBottomPadding()),
 
             contentPadding =
                 PaddingValues(
@@ -339,18 +364,13 @@ fun BookOverview(
             item {
 
                 BookHeader(
-
-                    book =
-                        book,
-
-                    onBack =
-                        onBack,
-
-                    onReadClick =
-                        onReadClick,
-
-                    onAddToLibraryClick =
-                        onAddToLibraryClick
+                    book = book,
+                    onBack = onBack,
+                    onReadClick = onReadClick,
+                    onReadChapterClick = { chapterNumber ->
+                        onReadChapter(chapterNumber)
+                    },
+                    onAddToLibraryClick = onAddToLibraryClick
                 )
             }
 

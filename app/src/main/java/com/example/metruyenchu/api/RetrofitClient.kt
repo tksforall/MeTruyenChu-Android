@@ -10,7 +10,7 @@ import java.util.concurrent.TimeUnit
 object RetrofitClient {
 
     private const val BASE_URL =
-        "http://10.137.43.67:9999/"
+        "http://10.226.195.67:9999/"
 
     private lateinit var sessionManager: SessionManager
 

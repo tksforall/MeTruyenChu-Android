@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -28,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.material.icons.automirrored.filled.MenuBook
 import com.example.metruyenchu.user_interface.explore.components.BookListItemData
 
 @Composable
@@ -166,7 +166,7 @@ fun RankingBookItem(
 
 
             // =========================
-            // RATING + BOOKMARK
+            // RATING + SỐ CHƯƠNG
             // =========================
 
             Row(
@@ -195,18 +195,16 @@ fun RankingBookItem(
                 )
 
                 Icon(
-                    imageVector = Icons.Default.Bookmark,
-                    contentDescription = null,
+                    imageVector = Icons.AutoMirrored.Filled.MenuBook, // Hoặc Icons.Default.Book
+                    contentDescription = "Số chương",
                     tint = Color(0xFFAAAAAA),
                     modifier = Modifier.size(15.dp)
                 )
 
-                Spacer(
-                    modifier = Modifier.width(2.dp)
-                )
+                Spacer(modifier = Modifier.width(3.dp))
 
                 Text(
-                    text = book.bookmarks,
+                    text = "${book.chapterCount} chương",
                     color = Color(0xFFAAAAAA),
                     fontSize = 12.sp
                 )

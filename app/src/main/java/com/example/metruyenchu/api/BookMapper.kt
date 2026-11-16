@@ -32,6 +32,8 @@ fun BookResponse.toBookListItemData(): BookListItemData {
 
         bookmarks = (bookmarkCount ?: 0L).toString(),
 
+        chapterCount = chapterCount ?: 0,
+
         viewCount = viewCount ?: 0L,
 
         recommendationCount = recommendationCount ?: 0L,

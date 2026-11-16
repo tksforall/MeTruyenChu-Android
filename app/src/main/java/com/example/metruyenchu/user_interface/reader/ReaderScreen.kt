@@ -3,6 +3,7 @@ package com.example.metruyenchu.user_interface.reader
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -64,6 +65,8 @@ import com.example.metruyenchu.user_interface.reader.components.ReaderReportBott
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
+import androidx.compose.material.icons.automirrored.filled.Comment
+import androidx.compose.runtime.withFrameNanos
 
 
 // ==========================================================
@@ -73,6 +76,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 @Composable
 fun ReaderScreen(
     chapter: ChapterResponse,
+    totalChapters: Int = 1,
 
     onBack: () -> Unit = {},
     onSettings: () -> Unit = {},
@@ -81,6 +85,7 @@ fun ReaderScreen(
     onBookmarkClick: () -> Unit = {},
     onCommentClick: () -> Unit = {},
     onBookOverviewClick: () -> Unit = {},
+    onReloadClick: () -> Unit = {},
 
     onPreviousChapter: () -> Unit = {},
     onNextChapter: () -> Unit = {},
@@ -182,13 +187,43 @@ fun ReaderScreen(
     // Không được giữ vị trí scroll của Chapter 1.
     // ======================================================
 
-    LaunchedEffect(chapter.chapterId) {
+    // Cờ xác định khi load chapter mới thì cuộn xuống cuối hay lên đầu
+    var scrollToBottomOnLoad by remember {
+        mutableStateOf(false)
+    }
 
-        listState.scrollToItem(0)
+    // ======================================================
+    // CHAPTER DATA (Đặt lên trên LaunchedEffect)
+    // ======================================================
+    val chapterTitle =
+        "Chương ${chapter.chapterNumber}: ${chapter.title.orEmpty()}"
+
+    val paragraphs =
+        chapter.content
+            .orEmpty()
+            .replace("\r\n", "\n")
+            .split(Regex("""\n\s*\n"""))
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+
+    // ======================================================
+    // RESET VỊ TRÍ KHI CHUYỂN CHAPTER
+    // ======================================================
+    LaunchedEffect(chapter.chapterId) {
+        if (scrollToBottomOnLoad) {
+            // Chờ 1 frame để LazyColumn cập nhật xong danh sách đoạn văn của chương mới
+            withFrameNanos { }
+            val lastIndex = (paragraphs.size - 1).coerceAtLeast(0)
+            listState.scrollToItem(index = lastIndex, scrollOffset = 100_000)
+            scrollToBottomOnLoad = false
+            userHasScrolledDown = true
+        } else {
+            listState.scrollToItem(0)
+            userHasScrolledDown = false
+        }
 
         nextChapterTriggered = false
         previousChapterTriggered = false
-        userHasScrolledDown = false
     }
 
     // ======================================================
@@ -221,21 +256,6 @@ fun ReaderScreen(
 
     // ======================================================
     // AUTO NEXT CHAPTER
-    // ======================================================
-    //
-    // Chỉ chạy khi người dùng thực sự đang scroll.
-    //
-    // Khi item cuối cùng xuất hiện:
-    //
-    // Chapter 1
-    //      ↓
-    // scroll
-    //      ↓
-    // cuối chapter
-    //      ↓
-    // onNextChapter()
-    //
-    // nextChapterTriggered đảm bảo callback chỉ chạy 1 lần.
     // ======================================================
 
     LaunchedEffect(listState, chapter.chapterId) {
@@ -345,34 +365,14 @@ fun ReaderScreen(
                     firstIndex == 0 &&
                     firstOffset == 0
                 ) {
-
                     previousChapterTriggered = true
+                    scrollToBottomOnLoad = true
 
                     onPreviousChapter()
                 }
             }
     }
 
-    // ======================================================
-    // CHAPTER DATA
-    // ======================================================
-
-    val chapterTitle =
-        "Chương ${chapter.chapterNumber}: ${chapter.title.orEmpty()}"
-
-    val paragraphs =
-        chapter.content
-            .orEmpty()
-            .replace("\r\n", "\n")
-            .split(
-                Regex("""\n\s*\n""")
-            )
-            .map {
-                it.trim()
-            }
-            .filter {
-                it.isNotBlank()
-            }
 
     // ======================================================
     // READER
@@ -410,11 +410,20 @@ fun ReaderScreen(
             // CHỈ NỘI DUNG TRUYỆN ĐƯỢC SCROLL
             // ==========================================
 
+            val interactionSource = remember { MutableInteractionSource() }
+
             LazyColumn(
                 state = listState,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(1f),
+                    .weight(1f)
+                    .clickable(
+                        interactionSource = interactionSource,
+                        indication = null
+                    ) {
+                        selectedTab = "Thông tin"
+                        showReaderSheet = !showReaderSheet
+                    },
 
                 contentPadding = PaddingValues(
                     start = horizontalPadding,
@@ -452,72 +461,32 @@ fun ReaderScreen(
         // ======================================================
 
         ReaderControlSheet(
+            visible = showReaderSheet,
+            selectedTab = selectedTab,
+            onTabSelected = { selectedTab = it },
 
-            visible =
-                showReaderSheet,
+            currentChapterNumber = chapter.chapterNumber,
+            totalChapters = totalChapters.coerceAtLeast(chapter.chapterNumber),
 
-            selectedTab =
-                selectedTab,
-
-            onTabSelected = {
-                selectedTab = it
-            },
-
-            fontSize =
-                readerFontSize,
-
-            onFontSizeChange = {
-                readerFontSize = it
-            },
-
-            backgroundColor =
-                readerBackgroundColor,
-
-            onBackgroundColorChange = {
-                readerBackgroundColor = it
-            },
-
-            selectedFont =
-                readerFont,
-
-            onFontChange = {
-                readerFont = it
-            },
-
-            onChapterListClick = {
-                onChapterListClick()
-            },
-
-            onNightModeClick = {
-                onNightModeClick()
-            },
-
-            onCommentClick = {
-                onCommentClick()
-            },
-
-            onBookOverviewClick = {
-                onBookOverviewClick()
-            },
-
-            isBookmarked =
-                isBookmarked,
-
-            onBookmarkClick = {
-                isBookmarked = !isBookmarked
-            },
-
-            onDownloadClick = {
-                showDownloadDialog = true
-            },
-
-            onReportClick = {
-                showReaderReportSheet = true
-            },
-
-            onDismiss = {
+            fontSize = readerFontSize,
+            onFontSizeChange = { readerFontSize = it },
+            backgroundColor = readerBackgroundColor,
+            onBackgroundColorChange = { readerBackgroundColor = it },
+            selectedFont = readerFont,
+            onFontChange = { readerFont = it },
+            onChapterListClick = { onChapterListClick() },
+            onNightModeClick = { onNightModeClick() },
+            onCommentClick = { onCommentClick() },
+            onBookOverviewClick = { onBookOverviewClick() },
+            onReloadClick = {
                 showReaderSheet = false
-            }
+                onReloadClick()
+            },
+            isBookmarked = isBookmarked,
+            onBookmarkClick = { isBookmarked = !isBookmarked },
+            onDownloadClick = { showDownloadDialog = true },
+            onReportClick = { showReaderReportSheet = true },
+            onDismiss = { showReaderSheet = false }
         )
 
         // ======================================================
@@ -534,11 +503,7 @@ fun ReaderScreen(
             },
 
             onSubmit = { reportType, detail ->
-
-                println(
-                    "Báo cáo: $reportType - $detail"
-                )
-
+                println("Báo cáo: $reportType\n$detail")
                 showReaderReportSheet = false
             }
         )
@@ -907,41 +872,28 @@ private fun DownloadChapterDialog(
 
 @Composable
 private fun ReaderControlSheet(
-
     visible: Boolean,
-
     selectedTab: String,
-
     onTabSelected: (String) -> Unit,
 
+    currentChapterNumber: Int,
+    totalChapters: Int,
+
     fontSize: Float,
-
     onFontSizeChange: (Float) -> Unit,
-
     backgroundColor: Color,
-
     onBackgroundColorChange: (Color) -> Unit,
-
     selectedFont: String,
-
     onFontChange: (String) -> Unit,
-
     onChapterListClick: () -> Unit,
-
     onNightModeClick: () -> Unit,
-
     onCommentClick: () -> Unit,
-
     onBookOverviewClick: () -> Unit,
-
+    onReloadClick: () -> Unit,
     isBookmarked: Boolean,
-
     onBookmarkClick: () -> Unit,
-
     onDownloadClick: () -> Unit,
-
     onReportClick: () -> Unit,
-
     onDismiss: () -> Unit
 ) {
 
@@ -1259,199 +1211,114 @@ private fun ReaderControlSheet(
                 ) {
 
                     item {
+                        val maxChapter = totalChapters.coerceAtLeast(1)
+                        val currentChap = currentChapterNumber.coerceIn(1, maxChapter)
+                        val progressFraction = (currentChap.toFloat() / maxChapter.toFloat()).coerceIn(0f, 1f)
 
                         Column(
-
-                            modifier =
-                                Modifier
-                                    .fillMaxWidth()
-                                    .padding(
-                                        start =
-                                            infoBoxHorizontalPadding,
-
-                                        end =
-                                            infoBoxHorizontalPadding,
-
-                                        top =
-                                            infoBoxTopPadding
-                                    )
-                                    .clip(
-                                        RoundedCornerShape(
-                                            20.dp
-                                        )
-                                    )
-                                    .background(
-                                        Color(0xFF666666)
-                                    )
-                                    .padding(
-                                        horizontal =
-                                            18.dp,
-
-                                        vertical =
-                                            14.dp
-                                    )
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(
+                                    start = 24.dp,
+                                    end = 24.dp,
+                                    top = 12.dp,
+                                    bottom = 4.dp
+                                )
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(Color(0xFF666666))
+                                .padding(horizontal = 14.dp, vertical = 10.dp)
                         ) {
-
+                            // HIỂN THỊ CHƯƠNG ĐANG ĐỌC / CHƯƠNG LỚN NHẤT
                             Text(
-
-                                text =
-                                    "1 / 1224",
-
-                                color =
-                                    Color.White,
-
-                                fontSize =
-                                    14.sp,
-
-                                modifier =
-                                    Modifier.align(
-                                        Alignment.CenterHorizontally
-                                    )
+                                text = "$currentChap / $maxChapter",
+                                color = Color.White,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium,
+                                modifier = Modifier.align(Alignment.CenterHorizontally)
                             )
 
-                            Spacer(
-                                modifier =
-                                    Modifier.height(
-                                        3.dp
-                                    )
-                            )
+                            Spacer(modifier = Modifier.height(2.dp))
 
+                            // THANH TIẾN ĐỘ TĨNH ‹ ----[===]---- ›
                             Row(
-
-                                modifier =
-                                    Modifier.fillMaxWidth(),
-
-                                verticalAlignment =
-                                    Alignment.CenterVertically
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-
                                 Text(
                                     text = "‹",
-                                    color =
-                                        Color.White,
-                                    fontSize =
-                                        30.sp
+                                    color = Color.White,
+                                    fontSize = 22.sp,
+                                    modifier = Modifier.padding(end = 6.dp)
                                 )
 
                                 Box(
-
-                                    modifier =
-                                        Modifier
-                                            .weight(1f)
-                                            .height(4.dp)
-                                            .background(
-                                                Color.White
-                                            )
-                                )
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(4.dp)
+                                        .clip(RoundedCornerShape(2.dp))
+                                        .background(Color(0xFF9E9E9E))
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth(progressFraction)
+                                            .fillMaxHeight()
+                                            .clip(RoundedCornerShape(2.dp))
+                                            .background(Color.White)
+                                    )
+                                }
 
                                 Text(
                                     text = "›",
-                                    color =
-                                        Color.White,
-                                    fontSize =
-                                        30.sp
+                                    color = Color.White,
+                                    fontSize = 22.sp,
+                                    modifier = Modifier.padding(start = 6.dp)
                                 )
                             }
 
-                            Spacer(
-                                modifier =
-                                    Modifier.height(
-                                        4.dp
-                                    )
-                            )
+                            Spacer(modifier = Modifier.height(6.dp))
 
                             Row(
-
-                                modifier =
-                                    Modifier.fillMaxWidth(),
-
-                                horizontalArrangement =
-                                    Arrangement.SpaceEvenly
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceEvenly
                             ) {
-
                                 ReaderAction(
-                                    icon =
-                                        Icons.Default.FormatListBulleted,
-
-                                    text =
-                                        "D.S Chương",
-
-                                    onClick =
-                                        onChapterListClick
+                                    icon = Icons.Default.FormatListBulleted,
+                                    text = "D.S Chương",
+                                    onClick = onChapterListClick
                                 )
 
                                 ReaderAction(
-                                    icon =
-                                        Icons.Default.Settings,
-
-                                    text =
-                                        "Bật",
-
-                                    onClick =
-                                        onNightModeClick
+                                    icon = Icons.Default.Settings,
+                                    text = "Bật",
+                                    onClick = onNightModeClick
                                 )
 
                                 ReaderAction(
-
-                                    icon =
-                                        if (
-                                            isBookmarked
-                                        ) {
-                                            Icons.Default.Bookmark
-                                        } else {
-                                            Icons.Default.BookmarkBorder
-                                        },
-
-                                    text =
-                                        if (
-                                            isBookmarked
-                                        ) {
-                                            "Đã đánh dấu"
-                                        } else {
-                                            "Đánh dấu"
-                                        },
-
-                                    onClick =
-                                        onBookmarkClick
+                                    icon = if (isBookmarked) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
+                                    text = if (isBookmarked) "Đã đánh dấu" else "Đánh dấu",
+                                    onClick = onBookmarkClick
                                 )
                             }
                         }
                     }
 
                     item {
-
                         ReaderMenuItem(
-                            icon =
-                                Icons.Default.Refresh,
-
-                            text =
-                                "Tải lại nội dung",
-
-                            startPadding =
-                                menuItemStartPadding,
-
-                            verticalPadding =
-                                menuItemVerticalPadding
+                            icon = Icons.Default.Refresh,
+                            text = "Tải lại nội dung",
+                            startPadding = menuItemStartPadding,
+                            verticalPadding = menuItemVerticalPadding,
+                            onClick = onReloadClick
                         )
                     }
 
                     item {
-
                         ReaderMenuItem(
-                            icon =
-                                Icons.Default.ChatBubbleOutline,
-
-                            text =
-                                "Bình luận (29)",
-
-                            startPadding =
-                                menuItemStartPadding,
-
-                            verticalPadding =
-                                menuItemVerticalPadding,
-
-                            onClick =
-                                onCommentClick
+                            icon = Icons.AutoMirrored.Filled.Comment,
+                            text = "Bình luận",
+                            startPadding = menuItemStartPadding,
+                            verticalPadding = menuItemVerticalPadding,
+                            onClick = onCommentClick
                         )
                     }
 
@@ -1813,59 +1680,29 @@ private fun ReaderSettingsContent(
 
 @Composable
 private fun ReaderAction(
-
-    icon:
-    androidx.compose.ui.graphics.vector.ImageVector,
-
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
     text: String,
-
     onClick: () -> Unit
 ) {
-
     Column(
-
-        horizontalAlignment =
-            Alignment.CenterHorizontally,
-
-        modifier =
-            Modifier
-                .clickable {
-                    onClick()
-                }
-                .padding(
-                    horizontal = 8.dp
-                )
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .clickable { onClick() }
+            .padding(horizontal = 6.dp)
     ) {
-
         Icon(
-
-            imageVector =
-                icon,
-
-            contentDescription =
-                text,
-
-            tint =
-                Color.White,
-
-            modifier =
-                Modifier.size(28.dp)
+            imageVector = icon,
+            contentDescription = text,
+            tint = Color.White,
+            modifier = Modifier.size(22.dp)
         )
 
-        Spacer(
-            modifier =
-                Modifier.height(2.dp)
-        )
+        Spacer(modifier = Modifier.height(2.dp))
 
         Text(
-
             text = text,
-
-            color =
-                Color.White,
-
-            fontSize =
-                13.sp
+            color = Color.White,
+            fontSize = 11.sp
         )
     }
 }

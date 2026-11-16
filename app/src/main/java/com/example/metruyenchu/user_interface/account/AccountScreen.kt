@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.ConfirmationNumber
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -62,14 +61,6 @@ fun AccountScreen(
         mutableStateOf(false)
     }
 
-
-    // ==================================================
-    // TICKET
-    // ==================================================
-
-    val ticketCount = 25
-
-
     // ==================================================
     // GIAO DIỆN
     // ==================================================
@@ -77,7 +68,7 @@ fun AccountScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF292929))
+            .background(Color(0xFF1E1E1E))
     ) {
 
 
@@ -129,41 +120,6 @@ fun AccountScreen(
                 fontWeight = FontWeight.Medium,
 
                 modifier = Modifier.weight(1f)
-            )
-
-
-            // ==================================================
-            // SỐ TICKET
-            // ==================================================
-
-            Text(
-                text = "#$ticketCount",
-
-                color = Color.White,
-
-                fontSize = 16.sp,
-
-                fontWeight = FontWeight.Medium
-            )
-
-
-            Spacer(
-                modifier = Modifier.width(6.dp)
-            )
-
-
-            // ==================================================
-            // ICON TICKET
-            // ==================================================
-
-            Icon(
-                imageVector = Icons.Default.ConfirmationNumber,
-
-                contentDescription = "Ticket",
-
-                tint = Color(0xFFFFD54F),
-
-                modifier = Modifier.size(25.dp)
             )
         }
 

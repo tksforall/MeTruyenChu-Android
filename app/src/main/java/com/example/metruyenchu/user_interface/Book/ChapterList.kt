@@ -8,42 +8,41 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Remove
-import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Sort
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.metruyenchu.user_interface.Book.components.BookHeader
-
+import com.example.metruyenchu.api.BookResponse
+import com.example.metruyenchu.api.ChapterResponse
+import com.example.metruyenchu.api.RetrofitClient
+import kotlinx.coroutines.launch
 
 // ==========================================================
 // DỮ LIỆU CHƯƠNG
@@ -56,716 +55,237 @@ data class ChapterData(
     val timestamp: String
 )
 
-
 // ==========================================================
-// MÀN HÌNH DANH SÁCH CHƯƠNG
+// MÀN HÌNH DANH SÁCH CHƯƠNG (THEO ẢNH MẪU)
 // ==========================================================
 
 @Composable
 fun ChapterList(
-
-    // ======================================================
-    // DỮ LIỆU THẬT
-    // ======================================================
-
-    book: com.example.metruyenchu.api.BookResponse,
-
-    chapters: List<com.example.metruyenchu.api.ChapterResponse>,
-
+    book: BookResponse,
+    chapters: List<ChapterResponse>,
     currentChapterNumber: Int? = null,
-
-    // ======================================================
-    // HEADER
-    // ======================================================
-
     onBack: () -> Unit = {},
-
     onReadClick: () -> Unit = {},
-
     onAddToLibraryClick: () -> Unit = {},
-
-    // ======================================================
-    // BẤM VÀO CHƯƠNG
-    // ======================================================
-
-    onChapterClick: (ChapterData) -> Unit = {
-        onReadClick()
-    },
-
-    // ======================================================
-    // CÁC TAB
-    // ======================================================
-
+    onChapterClick: (ChapterData) -> Unit = { onReadClick() },
     onOverviewClick: () -> Unit = {},
-
     onReviewClick: () -> Unit = {},
-
     onCommentClick: () -> Unit = {},
-
     onChapterListClick: () -> Unit = {}
 ) {
+    var isReversed by remember { mutableStateOf(false) }
+    var chapterListState by remember(chapters) { mutableStateOf(chapters) }
+    var activeChapterNumber by remember(currentChapterNumber) { mutableStateOf(currentChapterNumber) }
+    val scope = rememberCoroutineScope()
 
-
-    // ======================================================
-    // TRẠNG THÁI SẮP XẾP
-    // ======================================================
-
-    var isReversed by remember {
-        mutableStateOf(false)
+    // Tự động lấy chương đang đọc từ lịch sử nếu chưa truyền vào
+    LaunchedEffect(book.bookId) {
+        if (activeChapterNumber == null) {
+            try {
+                val historyRes = RetrofitClient.api.getMyReadingHistory()
+                if (historyRes.isSuccessful) {
+                    val bookHistory = historyRes.body().orEmpty().find { it.bookId == book.bookId }
+                    if (bookHistory != null) {
+                        val matchedChapter = chapterListState.find { it.chapterId == bookHistory.chapterId }
+                        if (matchedChapter != null) {
+                            activeChapterNumber = matchedChapter.chapterNumber
+                        }
+                    }
+                }
+            } catch (_: Exception) {}
+        }
     }
 
-    var isAddedToLibrary by remember {
-        mutableStateOf(false)
-    }
-
-    // ======================================================
-    // CHUYỂN DỮ LIỆU API -> DỮ LIỆU HIỂN THỊ
-    // ======================================================
-
-    val realChapters = chapters
+    val realChapters = chapterListState
         .sortedBy { it.chapterNumber }
         .map { chapter ->
-
             ChapterData(
                 id = chapter.chapterId,
-
                 index = chapter.chapterNumber,
-
-                title = chapter.title ?: "Không có tiêu đề",
-
-                timestamp = chapter.createdAt
-                    ?.let {
-                        "($it)"
-                    }
-                    ?: ""
+                title = chapter.title?.takeIf { it.isNotBlank() } ?: "Không có tiêu đề",
+                timestamp = formatChapterTimestamp(chapter.createdAt)
             )
         }
 
+    val displayedChapters = if (isReversed) realChapters.reversed() else realChapters
 
-   // ======================================================
-   // DANH SÁCH HIỂN THỊ
-   // ======================================================
-
-    val displayedChapters =
-        if (isReversed) {
-            realChapters.reversed()
-        } else {
-            realChapters
-        }
-
-
-    // ======================================================
-    // SCAFFOLD
-    // ======================================================
-
-    Scaffold(
-        contentWindowInsets = WindowInsets(0, 0, 0, 0),
-
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFF303030))
+    ) {
         // ==================================================
-        // BOTTOM BAR
+        // 1. TOP BAR ("<-  D.S Chương          ↻")
         // ==================================================
-
-        bottomBar = {
-
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(
-                        start = 10.dp,
-                        end = 10.dp,
-                        bottom = 10.dp
-                    )
-            ) {
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(
-                            RoundedCornerShape(20.dp)
-                        )
-                        .background(
-                            Color(0xFF2A2A2A)
-                        )
-                        .padding(
-                            horizontal = 14.dp,
-                            vertical = 8.dp
-                        ),
-
-                    verticalAlignment =
-                        Alignment.CenterVertically
-                ) {
-
-                    // ==========================================
-                    // THÔNG TIN TRUYỆN
-                    // ==========================================
-
-                    Column(
-                        modifier =
-                            Modifier.weight(1f)
-                    ) {
-
-                        Text(
-                            text = "Tên truyện",
-
-                            color =
-                                Color.White,
-
-                            fontSize =
-                                13.sp,
-
-                            fontWeight =
-                                FontWeight.Bold,
-
-                            maxLines = 1
-                        )
-
-                        Text(
-                            text = "Thể loại chính",
-
-                            color =
-                                Color(0xFF9E9E9E),
-
-                            fontSize =
-                                10.sp,
-
-                            maxLines = 1
-                        )
-                    }
-
-
-                    // ==========================================
-                    // NÚT ĐỌC
-                    // ==========================================
-
-                    Button(
-                        onClick = onReadClick,
-
-                        modifier =
-                            Modifier.height(36.dp),
-
-                        contentPadding =
-                            PaddingValues(
-                                horizontal = 18.dp
-                            ),
-
-                        shape =
-                            RoundedCornerShape(18.dp),
-
-                        colors =
-                            ButtonDefaults.buttonColors(
-                                containerColor =
-                                    Color.Black,
-
-                                contentColor =
-                                    Color.White
-                            )
-                    ) {
-
-                        Text(
-                            text = "Đọc",
-
-                            fontSize = 12.sp
-                        )
-                    }
-
-
-                    Spacer(
-                        modifier =
-                            Modifier.width(8.dp)
-                    )
-
-
-                    // ==========================================
-                    // NÚT THÊM VÀO TỦ
-                    // ==========================================
-
-                    IconButton(
-                        onClick = {
-
-                            isAddedToLibrary = !isAddedToLibrary
-
-                            if (isAddedToLibrary) {
-                                onAddToLibraryClick()
-                            }
-                        },
-
-                        modifier = Modifier.size(40.dp)
-                    ) {
-
-                        Box(
-                            modifier = Modifier
-                                .size(36.dp)
-                                .clip(CircleShape)
-                                .background(
-                                    Color(0xFF1976D2)
-                                ),
-
-                            contentAlignment = Alignment.Center
-                        ) {
-
-                            Icon(
-                                imageVector =
-                                    if (isAddedToLibrary) {
-                                        Icons.Default.Remove
-                                    } else {
-                                        Icons.Default.Add
-                                    },
-
-                                contentDescription =
-                                    if (isAddedToLibrary) {
-                                        "Bỏ khỏi tủ"
-                                    } else {
-                                        "Thêm vào tủ"
-                                    },
-
-                                tint = Color.White,
-
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-    ) { paddingValues ->
-
-
-        // ======================================================
-        // DANH SÁCH CHÍNH
-        // ======================================================
-
-        LazyColumn(
-
+        Row(
             modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Color(0xFF303030)
-                )
-                .padding(
-                    paddingValues
-                ),
-
-            contentPadding =
-                PaddingValues(
-                    bottom = 15.dp
-                )
+                .fillMaxWidth()
+                .background(Color(0xFF282828))
+                .windowInsetsPadding(WindowInsets.statusBars)
+                .height(56.dp)
+                .padding(horizontal = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-
-
-            // ==================================================
-            // 1. HEADER
-            // ==================================================
-
-            item {
-
-                BookHeader(
-                    book = book,
-
-                    onBack = onBack,
-
-                    onReadClick = onReadClick,
-
-                    onAddToLibraryClick =
-                        onAddToLibraryClick
+            IconButton(onClick = onBack) {
+                Icon(
+                    imageVector = Icons.Default.ArrowBack,
+                    contentDescription = "Quay lại",
+                    tint = Color.White,
+                    modifier = Modifier.size(24.dp)
                 )
             }
 
+            Spacer(modifier = Modifier.width(12.dp))
 
-            // ==================================================
-            // 2. THANH TAB
-            // ==================================================
+            Text(
+                text = "D.S Chương",
+                color = Color.White,
+                fontSize = 19.sp,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.weight(1f)
+            )
 
-            item {
-
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(
-                            Color(0xFF282828)
-                        )
-                ) {
-
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(44.dp),
-
-                        horizontalArrangement =
-                            Arrangement.SpaceEvenly,
-
-                        verticalAlignment =
-                            Alignment.CenterVertically
-                    ) {
-
-                        // --------------------------------------
-                        // GIỚI THIỆU
-                        // --------------------------------------
-
-                        Text(
-                            text = "Giới Thiệu",
-
-                            color =
-                                Color(0xFF888888),
-
-                            fontSize =
-                                14.sp,
-
-                            modifier =
-                                Modifier.clickable {
-                                    onOverviewClick()
-                                }
-                        )
-
-
-                        // --------------------------------------
-                        // ĐÁNH GIÁ
-                        // --------------------------------------
-
-                        Text(
-                            text = "Đánh Giá",
-
-                            color =
-                                Color(0xFF888888),
-
-                            fontSize =
-                                14.sp,
-
-                            modifier =
-                                Modifier.clickable {
-                                    onReviewClick()
-                                }
-                        )
-
-
-                        // --------------------------------------
-                        // BÌNH LUẬN
-                        // --------------------------------------
-
-                        Text(
-                            text = "Bình Luận",
-
-                            color =
-                                Color(0xFF888888),
-
-                            fontSize =
-                                14.sp,
-
-                            modifier =
-                                Modifier.clickable {
-                                    onCommentClick()
-                                }
-                        )
-
-
-                        // --------------------------------------
-                        // D.S CHƯƠNG
-                        // --------------------------------------
-
-                        Column(
-                            horizontalAlignment =
-                                Alignment.CenterHorizontally,
-
-                            modifier =
-                                Modifier.clickable {
-                                    onChapterListClick()
-                                }
-                        ) {
-
-                            Text(
-                                text =
-                                    "D.S Chương",
-
-                                color =
-                                    Color.White,
-
-                                fontSize =
-                                    14.sp,
-
-                                fontWeight =
-                                    FontWeight.Bold
-                            )
-
-                            Spacer(
-                                modifier =
-                                    Modifier.height(6.dp)
-                            )
-
-                            Box(
-                                modifier = Modifier
-                                    .width(60.dp)
-                                    .height(2.dp)
-                                    .background(
-                                        Color.White
-                                    )
-                            )
-                        }
-                    }
-
-
-                    HorizontalDivider(
-                        color =
-                            Color(0xFF454545),
-
-                        thickness = 1.dp
-                    )
-                }
-            }
-
-
-            // ==================================================
-            // 3. SỐ CHƯƠNG + SẮP XẾP
-            // ==================================================
-
-            item {
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(
-                            Color(0xFF303030)
-                        )
-                        .padding(
-                            horizontal = 16.dp,
-                            vertical = 6.dp
-                        ),
-
-                    horizontalArrangement =
-                        Arrangement.SpaceBetween,
-
-                    verticalAlignment =
-                        Alignment.CenterVertically
-                ) {
-
-                    // ------------------------------------------
-                    // SỐ CHƯƠNG
-                    // ------------------------------------------
-
-                    Row(
-                        verticalAlignment =
-                            Alignment.CenterVertically
-                    ) {
-
-                        Text(
-                            text = "Số chương",
-
-                            color =
-                                Color.White,
-
-                            fontSize =
-                                16.sp,
-
-                            fontWeight =
-                                FontWeight.Bold
-                        )
-
-                        Spacer(
-                            modifier =
-                                Modifier.width(4.dp)
-                        )
-
-                        Text(
-                            text = "(${realChapters.size})",
-
-                            color = Color(0xFF888888),
-
-                            fontSize = 16.sp
-                        )
-                    }
-
-
-                    // ------------------------------------------
-                    // NÚT SẮP XẾP
-                    // ------------------------------------------
-
-                    IconButton(
-
-                        onClick = {
-
-                            // Đảo thứ tự danh sách
-                            isReversed = !isReversed
-                        }
-                    ) {
-
-                        Icon(
-                            imageVector =
-                                Icons.Default.Sort,
-
-                            contentDescription =
-                                if (isReversed) {
-                                    "Sắp xếp tăng dần"
-                                } else {
-                                    "Sắp xếp giảm dần"
-                                },
-
-                            tint =
-                                Color.White,
-
-                            modifier =
-                                Modifier.size(24.dp)
-                        )
+            IconButton(
+                onClick = {
+                    scope.launch {
+                        try {
+                            val res = RetrofitClient.api.getChaptersByBookId(book.bookId)
+                            if (res.isSuccessful && res.body() != null) {
+                                chapterListState = res.body()!!
+                            }
+                        } catch (_: Exception) {}
                     }
                 }
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Refresh,
+                    contentDescription = "Làm mới",
+                    tint = Color.White,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+        }
+
+        // ==================================================
+        // 2. HÀNG "Số chương (xxx)" + ICON SẮP XẾP
+        // ==================================================
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 24.dp, end = 12.dp, top = 12.dp, bottom = 6.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = "Số chương",
+                    color = Color(0xFFE0E0E0),
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    text = "(${realChapters.size})",
+                    color = Color(0xFF888888),
+                    fontSize = 15.sp
+                )
             }
 
+            IconButton(
+                onClick = { isReversed = !isReversed }
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Sort,
+                    contentDescription = if (isReversed) "Sắp xếp tăng dần" else "Sắp xếp giảm dần",
+                    tint = Color(0xFFE0E0E0),
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+        }
 
-            // ==================================================
-            // 4. DANH SÁCH CHƯƠNG
-            // ==================================================
-
+        // ==================================================
+        // 3. DANH SÁCH CÁC CHƯƠNG
+        // ==================================================
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f),
+            contentPadding = PaddingValues(bottom = 24.dp)
+        ) {
             items(
-
                 items = displayedChapters,
-
-                key = {
-                    it.id
-                }
-
+                key = { it.id }
             ) { chapter ->
-
                 ChapterItemView(
-
                     chapter = chapter,
-
-                    isCurrentChapter =
-                        chapter.index == currentChapterNumber,
-
+                    isCurrentChapter = chapter.index == activeChapterNumber,
                     onClick = {
-
+                        activeChapterNumber = chapter.index
                         onChapterClick(chapter)
                     }
-                )
-            }
-
-
-            // ==================================================
-            // KHOẢNG TRỐNG CUỐI
-            // ==================================================
-
-            item {
-
-                Spacer(
-                    modifier =
-                        Modifier.height(20.dp)
                 )
             }
         }
     }
 }
 
-
 // ==========================================================
-// ITEM TỪNG CHƯƠNG
+// ITEM TỪNG CHƯƠNG (SỐ THỨ TỰ + CHƯƠNG X: TIÊU ĐỀ (THỜI GIAN))
 // ==========================================================
 
 @Composable
 fun ChapterItemView(
-
     chapter: ChapterData,
-
     isCurrentChapter: Boolean = false,
-
     onClick: () -> Unit = {}
 ) {
+    val textColor = if (isCurrentChapter) Color.White else Color(0xFFB5B5B5)
+    val indexColor = if (isCurrentChapter) Color.White else Color(0xFF8E8E8E)
+    val textWeight = if (isCurrentChapter) FontWeight.Bold else FontWeight.Normal
+
+    val displayLine = buildString {
+        append("Chương ${chapter.index}: ${chapter.title}")
+        if (chapter.timestamp.isNotBlank()) {
+            append(" (${chapter.timestamp})")
+        }
+    }
 
     Row(
-
         modifier = Modifier
             .fillMaxWidth()
-
-            .clickable {
-                onClick()
-            }
-
-            .background(
-                if (isCurrentChapter) {
-                    Color(0xFF383838)
-                } else {
-                    Color(0xFF303030)
-                }
-            )
-
-            .padding(
-                horizontal = 16.dp,
-                vertical = 6.dp
-            ),
-
-        verticalAlignment =
-            Alignment.Top
+            .clickable { onClick() }
+            .padding(horizontal = 24.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.Top
     ) {
-
-        // ==================================================
-        // SỐ CHƯƠNG
-        // ==================================================
-
         Text(
             text = chapter.index.toString(),
-
-            color =
-                if (isCurrentChapter) {
-                    Color.White
-                } else {
-                    Color(0xFF888888)
-                },
-
+            color = indexColor,
             fontSize = 15.sp,
-
-            fontWeight =
-                if (isCurrentChapter) {
-                    FontWeight.Bold
-                } else {
-                    FontWeight.Normal
-                },
-
-            modifier =
-                Modifier.width(36.dp)
+            fontWeight = textWeight,
+            modifier = Modifier.width(34.dp)
         )
 
+        Text(
+            text = displayLine,
+            color = textColor,
+            fontSize = 15.sp,
+            fontWeight = textWeight,
+            lineHeight = 21.sp,
+            modifier = Modifier.weight(1f)
+        )
+    }
+}
 
-        // ==================================================
-        // THÔNG TIN CHƯƠNG
-        // ==================================================
+// ==========================================================
+// FORMAT THỜI GIAN CHƯƠNG -> (YYYY-MM-DD HH:mm)
+// ==========================================================
 
-        Column(
-            modifier =
-                Modifier.weight(1f)
-        ) {
-
-            Text(
-                text = chapter.title,
-
-                color =
-                    if (isCurrentChapter) {
-                        Color.White
-                    } else {
-                        Color(0xFFD0D0D0)
-                    },
-
-                fontSize = 15.sp,
-
-                fontWeight =
-                    if (isCurrentChapter) {
-                        FontWeight.Bold
-                    } else {
-                        FontWeight.Normal
-                    },
-
-                maxLines = 2
-            )
-
-            Spacer(
-                modifier =
-                    Modifier.height(1.dp)
-            )
-
-            Text(
-                text = chapter.timestamp,
-
-                color =
-                    Color(0xFF888888),
-
-                fontSize = 12.sp
-            )
-        }
+private fun formatChapterTimestamp(raw: String?): String {
+    if (raw.isNullOrBlank()) return ""
+    return try {
+        val clean = raw.trim().replace("T", " ")
+        if (clean.length >= 16) clean.substring(0, 16) else clean
+    } catch (_: Exception) {
+        raw
     }
 }

@@ -28,6 +28,19 @@ interface ApiService {
         @Query("password") password: String
     ): Response<LoginResponse>
 
+    @Headers("No-Auth: true")
+    @POST("api/auth/forgot-password")
+    suspend fun forgotPassword(
+        @Query("email") email: String
+    ): Response<ForgotPasswordResponse>
+
+    @Headers("No-Auth: true")
+    @POST("api/auth/reset-password")
+    suspend fun resetPassword(
+        @Query("email") email: String,
+        @Query("otp") otp: String,
+        @Query("newPassword") newPassword: String
+    ): Response<ResetPasswordResponse>
 
     // ==================================================
     // USER
@@ -245,7 +258,7 @@ interface ApiService {
     suspend fun unfollowBook(
         @Path("userId") userId: Long,
         @Path("bookId") bookId: Long
-    ): Response<Unit>
+    ): Response<okhttp3.ResponseBody>
 
 
     // ==================================================
@@ -265,7 +278,7 @@ interface ApiService {
     suspend fun removeBookFromLibrary(
         @Path("userId") userId: Long,
         @Path("bookId") bookId: Long
-    ): Response<Unit>
+    ): Response<okhttp3.ResponseBody>
 
 
     // ==================================================
@@ -281,6 +294,11 @@ interface ApiService {
     suspend fun markNotificationRead(
         @Path("notificationId") notificationId: Long
     ): Response<NotificationResponse>
+
+    @DELETE("api/notifications/{notificationId}")
+    suspend fun deleteNotification(
+        @Path("notificationId") notificationId: Long
+    ): Response<Unit>
 
 
     // ==================================================

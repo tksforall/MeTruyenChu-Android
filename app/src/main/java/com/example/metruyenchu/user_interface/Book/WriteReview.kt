@@ -36,6 +36,7 @@ import kotlinx.coroutines.launch
 fun WriteReview(
     bookName: String = "Tên truyện",
 
+
     onBack: () -> Unit = {},
 
     onSubmit: (
@@ -329,13 +330,13 @@ fun WriteReview(
 
 
                 Switch(
-                    checked =
-                        onlyRating,
-
-                    onCheckedChange = {
-
+                    checked = onlyRating,
+                    onCheckedChange = { isChecked ->
                         if (!isSubmitting) {
-                            onlyRating = it
+                            onlyRating = isChecked
+                            if (isChecked) {
+                                content = "" // Xóa trắng nội dung nếu bật chế độ chỉ chấm điểm
+                            }
                         }
                     },
 
@@ -504,16 +505,17 @@ fun WriteReview(
                             RoundedCornerShape(32.dp)
                     )
                     .clickable(
-                        enabled =
-                            canSubmit
+                        enabled = canSubmit
                     ) {
+                        // Nếu bật "Tôi chỉ muốn chấm điểm" thì ép content thành chuỗi rỗng ""
+                        val finalContent = if (onlyRating) "" else content.trim()
 
                         onSubmit(
                             rating,
                             character,
                             plot,
                             world,
-                            content
+                            finalContent
                         )
                     },
 
